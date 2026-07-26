@@ -251,7 +251,7 @@ async function dondeEstoy() {
 const extraerJSON = (t) => { const m = t.match(/\[[\s\S]*\]/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.15 · 26 jul 2026";
+const APP_VER = "v10.16 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1789,59 +1789,78 @@ function ChatIdeas({ cfg, viajes }) {
 
 /* ═══ VIAJE YA VIVIDO: cargar de una las fotos de un viaje pasado ═══ */
 function NuevoVivido({ onCrear, cerrar }) {
-  const fileRef = useRef(null);
   const [nombre, setNombre] = useState("");
-  const [lugarTxt, setLugarTxt] = useState("");
-  const [lugarSel, setLugarSel] = useState(null);
-  const [buscando, setBuscando] = useState(false);
-  const [resLugar, setResLugar] = useState([]);
-  const [fecha, setFecha] = useState(hoyISO());
-  const [archivos, setArchivos] = useState([]);
+  const [etapas, setEtapas] = useState([{ id: uid(), lugarTxt: "", lugarSel: null, fecha: hoyISO(), archivos: [], resLugar: [], buscando: false, detectando: false }]);
   const [subiendo, setSubiendo] = useState(false);
   const [prog, setProg] = useState(0);
+  const fileRefs = useRef({});
 
-  async function buscarLugar() {
-    if (!lugarTxt.trim()) return;
-    setBuscando(true);
-    try { setResLugar(await geocodificar(lugarTxt)); } catch { setResLugar([]); }
-    setBuscando(false);
+  const setEtapa = (id, patch) => setEtapas(prev => prev.map(e => e.id === id ? { ...e, ...(typeof patch === "function" ? patch(e) : patch) } : e));
+
+  function agregarEtapa() {
+    setEtapas(prev => {
+      const ultima = prev[prev.length - 1];
+      const sig = ultima?.fecha ? new Date(ultima.fecha + "T12:00:00") : new Date();
+      if (ultima?.fecha) sig.setDate(sig.getDate() + 1);
+      return [...prev, { id: uid(), lugarTxt: "", lugarSel: null, fecha: sig.toISOString().slice(0, 10), archivos: [], resLugar: [], buscando: false, detectando: false }];
+    });
   }
-  const [detectando, setDetectando] = useState(false);
-  async function elegirArchivos(e) {
-    const files = Array.from(e.target.files || []); e.target.value = "";
-    setArchivos(prev => [...prev, ...files]);
-    if (!lugarSel) {
-      setDetectando(true);
-      for (const f of files) { const l = await lugarDesdeFoto(f); if (l) { setLugarSel({ ...l, detectado: true }); break; } }
-      setDetectando(false);
+  function quitarEtapa(id) { setEtapas(prev => prev.length > 1 ? prev.filter(e => e.id !== id) : prev); }
+  function moverEtapa(id, dir) {
+    setEtapas(prev => { const i = prev.findIndex(e => e.id === id); const j = i + dir; if (j < 0 || j >= prev.length) return prev; const arr = [...prev]; [arr[i], arr[j]] = [arr[j], arr[i]]; return arr; });
+  }
+  async function buscarLugarEtapa(id, txt) {
+    if (!txt.trim()) return;
+    setEtapa(id, { buscando: true });
+    try { const r = await geocodificar(txt); setEtapa(id, { resLugar: r, buscando: false }); } catch { setEtapa(id, { resLugar: [], buscando: false }); }
+  }
+  async function elegirArchivosEtapa(id, files) {
+    setEtapa(id, e => ({ archivos: [...e.archivos, ...files] }));
+    const et = etapas.find(e => e.id === id);
+    if (et && !et.lugarSel) {
+      setEtapa(id, { detectando: true });
+      for (const f of files) { const l = await lugarDesdeFoto(f); if (l) { setEtapa(id, { lugarSel: { ...l, detectado: true }, detectando: false }); return; } }
+      setEtapa(id, { detectando: false });
     }
   }
-  function sacarArchivo(i) { setArchivos(prev => prev.filter((_, j) => j !== i)); }
 
   async function crear() {
     if (!nombre.trim()) { alert("Ponele un nombre al viaje."); return; }
-    if (!archivos.length) { alert("Elegí al menos una foto o video."); return; }
+    const totalArchivos = etapas.reduce((s2, e) => s2 + e.archivos.length, 0);
+    if (!totalArchivos) { alert("Elegí al menos una foto o video en alguna etapa."); return; }
     setSubiendo(true); setProg(0);
     const viajeId = uid();
-    const pesadas = archivos.filter(f => f.size > 150 * 1024 * 1024);
-    const buenas = archivos.filter(f => f.size <= 150 * 1024 * 1024);
-    const resultados = await procesarEnParalelo(buenas, async (f) => {
-      const esVideo = f.type.startsWith("video");
-      const blob = esVideo ? f : await comprimirFoto(f);
-      const id = uid();
-      await mediaGuardar({ id, viajeId, tipo: esVideo ? "video" : "foto", blob, nombre: f.name, ts: Date.now() });
-      return id;
-    }, 4, (hechas, total) => setProg(Math.round((hechas / total) * 100)));
-    const mediaIds = resultados.filter(r => r.ok).map(r => r.valor);
-    const errores = [...pesadas.map(f => `${f.name}: pesa más de 150 MB`), ...resultados.filter(r => !r.ok).map(r => `no se pudo guardar (${r.error && r.error.message || r.error || "espacio lleno o bloqueado"})`)];
-    if (mediaIds.length === 0) {
+    let hechasGlobal = 0;
+    const errores = [];
+    const bitacora = [];
+    const puntos = [];
+    for (const et of etapas) {
+      const pesadas = et.archivos.filter(f => f.size > 150 * 1024 * 1024);
+      const buenas = et.archivos.filter(f => f.size <= 150 * 1024 * 1024);
+      pesadas.forEach(f => errores.push(`${f.name}: pesa más de 150 MB`));
+      const resultados = await procesarEnParalelo(buenas, async (f) => {
+        const esVideo = f.type.startsWith("video");
+        const blob = esVideo ? f : await comprimirFoto(f);
+        const id = uid();
+        await mediaGuardar({ id, viajeId, tipo: esVideo ? "video" : "foto", blob, nombre: f.name, ts: Date.now() });
+        return id;
+      }, 4, (hechas) => { setProg(Math.round(((hechasGlobal + hechas) / totalArchivos) * 100)); });
+      hechasGlobal += buenas.length;
+      const mediaIds = resultados.filter(r => r.ok).map(r => r.valor);
+      resultados.filter(r => !r.ok).forEach(r => errores.push(`no se pudo guardar (${r.error && r.error.message || r.error || "espacio lleno o bloqueado"})`));
+      if (mediaIds.length > 0 || et.lugarSel) bitacora.push({ id: uid(), fecha: et.fecha || hoyISO(), texto: "", mediaIds, lugar: et.lugarSel ? { nombre: et.lugarSel.nombre.split(",").slice(0, 2).join(","), lat: et.lugarSel.lat, lon: et.lugarSel.lon } : null });
+      if (et.lugarSel) puntos.push({ nombre: et.lugarSel.nombre, lat: et.lugarSel.lat, lon: et.lugarSel.lon });
+    }
+    const totalGuardadas = bitacora.reduce((s2, b) => s2 + b.mediaIds.length, 0);
+    if (totalGuardadas === 0) {
       setSubiendo(false);
       alert(`No pude guardar ninguna foto/video.\n\n${errores.slice(0, 4).join("\n")}${errores.length > 4 ? `\n… y ${errores.length - 4} más` : ""}\n\nProbá con menos archivos por vez, o revisá que el teléfono tenga espacio libre.`);
       return;
     }
-    if (errores.length > 0) alert(`Se guardaron ${mediaIds.length} de ${archivos.length}. No se pudieron guardar:\n${errores.slice(0, 4).join("\n")}`);
-    const entrada = { id: uid(), fecha, texto: "", mediaIds, lugar: lugarSel ? { nombre: lugarSel.nombre.split(",").slice(0, 2).join(","), lat: lugarSel.lat, lon: lugarSel.lon } : null };
-    const viaje = { id: viajeId, nombre: nombre.trim(), creado: Date.now(), vivido: true, puntos: lugarSel ? [{ nombre: lugarSel.nombre, lat: lugarSel.lat, lon: lugarSel.lon }] : [], sugerencias: [], bitacora: [entrada], fechaInicio: fecha, diasVacaciones: "" };
+    if (errores.length > 0) alert(`Se guardaron ${totalGuardadas} de ${totalArchivos}. No se pudieron guardar:\n${errores.slice(0, 4).join("\n")}`);
+    const fechaInicio = etapas[0]?.fecha || hoyISO();
+    const diasVac = etapas.length > 1 ? String(Math.max(1, diasEntre(fechaInicio, etapas[etapas.length - 1].fecha || fechaInicio) + 1)) : "";
+    const viaje = { id: viajeId, nombre: nombre.trim(), creado: Date.now(), vivido: true, puntos, sugerencias: [], bitacora, fechaInicio, diasVacaciones: diasVac };
     onCrear(viaje);
     setSubiendo(false);
   }
@@ -1852,45 +1871,61 @@ function NuevoVivido({ onCrear, cerrar }) {
       <div style={{ fontSize: 16, fontWeight: 800, color: T.text }}>📷 Un viaje ya vivido</div>
     </div>
     <div style={{ padding: 18, paddingBottom: 60 }}>
-      <div style={{ fontSize: 12.5, color: T.sub, lineHeight: 1.6, marginBottom: 18 }}>Para los viajes de antes de la app: subí las fotos de una y quedan guardadas como si las hubieran cargado en su momento — en la bitácora, con su fecha y su lugar en el mapa.</div>
+      <div style={{ fontSize: 12.5, color: T.sub, lineHeight: 1.6, marginBottom: 18 }}>Para los viajes de antes de la app: contá el recorrido que hicieron, etapa por etapa — Buenos Aires → Mendoza → San Martín de los Andes — con las fotos de cada lugar. Queda guardado como si lo hubieran cargado en el momento.</div>
 
       <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>¿Qué viaje fue?</div>
-      <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Bariloche con los chicos"
-        style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", fontSize: 14, color: T.text, outline: "none", boxSizing: "border-box", marginBottom: 14 }} />
+      <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Cruce de cordillera con los chicos"
+        style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", fontSize: 14, color: T.text, outline: "none", boxSizing: "border-box", marginBottom: 20 }} />
 
-      <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>¿Cuándo fue?</div>
-      <input type="date" value={fecha} max={hoyISO()} onChange={e => setFecha(e.target.value)}
-        style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", fontSize: 14, color: T.text, outline: "none", boxSizing: "border-box", colorScheme: "dark", marginBottom: 14 }} />
+      {etapas.map((et, i) => (<div key={et.id} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: 15, marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+          <div style={{ width: 24, height: 24, borderRadius: "50%", background: i === 0 ? T.ok : i === etapas.length - 1 && etapas.length > 1 ? T.danger : T.accent2, color: "#fff", fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i === 0 ? "A" : i === etapas.length - 1 && etapas.length > 1 ? "B" : i}</div>
+          <div style={{ flex: 1, fontSize: 12.5, fontWeight: 800, color: T.text }}>{et.lugarSel ? et.lugarSel.nombre.split(",").slice(0, 2).join(",") : `Etapa ${i + 1}`}</div>
+          {i > 0 && <button onClick={() => moverEtapa(et.id, -1)} style={{ background: "none", border: "none", color: T.sub, cursor: "pointer", padding: 3 }}><Ico n="subir" s={14} /></button>}
+          {i < etapas.length - 1 && <button onClick={() => moverEtapa(et.id, 1)} style={{ background: "none", border: "none", color: T.sub, cursor: "pointer", padding: 3 }}><Ico n="bajar" s={14} /></button>}
+          {etapas.length > 1 && <button onClick={() => quitarEtapa(et.id)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer", padding: 3 }}><Ico n="tacho" s={14} /></button>}
+        </div>
 
-      <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>¿Dónde fue? (opcional, para verlo en el mapa)</div>
-      {detectando && <div style={{ fontSize: 11.5, color: T.sub, marginBottom: 8 }}>📍 Buscando la ubicación en la foto…</div>}
-      {lugarSel ? <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(232,163,61,.1)", border: `1px solid ${T.accent}`, borderRadius: 10, padding: "10px 12px", marginBottom: 14 }}>
-        <span style={{ fontSize: 14 }}>📍</span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12.5, color: T.text, fontWeight: 700 }}>{lugarSel.nombre.split(",").slice(0, 2).join(",")}</div>
-          {lugarSel.detectado && <div style={{ fontSize: 10, color: T.accent }}>Detectado en la foto ✓</div>}
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 10, color: T.sub, marginBottom: 3 }}>¿Dónde?</div>
+            {et.lugarSel ? <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(232,163,61,.1)", border: `1px solid ${T.accent}`, borderRadius: 9, padding: "9px 10px" }}>
+              <span style={{ fontSize: 12 }}>📍</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, color: T.text, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{et.lugarSel.nombre.split(",").slice(0, 2).join(",")}</div>
+                {et.lugarSel.detectado && <div style={{ fontSize: 9.5, color: T.accent }}>De la foto ✓</div>}
+              </div>
+              <button onClick={() => setEtapa(et.id, { lugarSel: null })} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}>✕</button>
+            </div> : <div>
+              <div style={{ display: "flex", gap: 5 }}>
+                <input value={et.lugarTxt} onChange={e => setEtapa(et.id, { lugarTxt: e.target.value })} onKeyDown={e => e.key === "Enter" && buscarLugarEtapa(et.id, et.lugarTxt)} placeholder="Mendoza"
+                  style={{ flex: 1, minWidth: 0, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "9px 10px", fontSize: 12.5, color: T.text, outline: "none" }} />
+                <button onClick={() => buscarLugarEtapa(et.id, et.lugarTxt)} disabled={et.buscando} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.accent, borderRadius: 9, padding: "0 11px", cursor: "pointer", fontSize: 11.5 }}>{et.buscando ? "…" : "Buscar"}</button>
+              </div>
+              {et.resLugar.length > 0 && <div style={{ marginTop: 5, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, overflow: "hidden" }}>
+                {et.resLugar.map((r, ri) => <div key={ri} onClick={() => setEtapa(et.id, { lugarSel: r, resLugar: [], lugarTxt: "" })} style={{ padding: "8px 10px", fontSize: 11.5, color: T.text, cursor: "pointer", borderTop: ri ? `1px solid ${T.border}` : "none" }}>{r.nombre}</div>)}
+              </div>}
+              {et.detectando && <div style={{ fontSize: 10.5, color: T.sub, marginTop: 5 }}>📍 Buscando la ubicación en la foto…</div>}
+            </div>}
+          </div>
+          <div style={{ width: 118 }}>
+            <div style={{ fontSize: 10, color: T.sub, marginBottom: 3 }}>¿Cuándo?</div>
+            <input type="date" value={et.fecha} max={hoyISO()} onChange={e => setEtapa(et.id, { fecha: e.target.value })}
+              style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "9px 8px", fontSize: 12, color: T.text, outline: "none", colorScheme: "dark", boxSizing: "border-box" }} />
+          </div>
         </div>
-        <button onClick={() => setLugarSel(null)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}>✕</button>
-      </div> : <div style={{ marginBottom: 14 }}>
-        <div style={{ display: "flex", gap: 7 }}>
-          <input value={lugarTxt} onChange={e => setLugarTxt(e.target.value)} onKeyDown={e => e.key === "Enter" && buscarLugar()} placeholder="Bariloche, Río Negro"
-            style={{ flex: 1, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: T.text, outline: "none" }} />
-          <button onClick={buscarLugar} disabled={buscando} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.accent, borderRadius: 10, padding: "0 14px", cursor: "pointer" }}>{buscando ? "…" : "Buscar"}</button>
-        </div>
-        {resLugar.length > 0 && <div style={{ marginTop: 6, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, overflow: "hidden" }}>
-          {resLugar.map((r, i) => <div key={i} onClick={() => { setLugarSel(r); setResLugar([]); }} style={{ padding: "10px 12px", fontSize: 12.5, color: T.text, cursor: "pointer", borderTop: i ? `1px solid ${T.border}` : "none" }}>{r.nombre}</div>)}
+
+        <button onClick={() => fileRefs.current[et.id]?.click()} style={{ width: "100%", background: T.card2, border: `1.5px dashed ${T.border}`, color: T.text, borderRadius: 10, padding: "12px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}><Ico n="cam" s={15} c={T.accent} /> {et.archivos.length ? `${et.archivos.length} elegidas — agregar más` : "Fotos y videos de acá"}</button>
+        <input ref={r => fileRefs.current[et.id] = r} type="file" accept="image/*,video/*" multiple onChange={e => { const files = Array.from(e.target.files || []); e.target.value = ""; elegirArchivosEtapa(et.id, files); }} style={{ display: "none" }} />
+        {et.archivos.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 9 }}>
+          {et.archivos.map((f, fi) => (<div key={fi} style={{ position: "relative", width: 60, height: 60, borderRadius: 8, overflow: "hidden", border: `1px solid ${T.border}`, background: T.card2 }}>
+            {f.type.startsWith("video") ? <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🎬</div> : <img src={URL.createObjectURL(f)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+            <button onClick={() => setEtapa(et.id, e2 => ({ archivos: e2.archivos.filter((_, j) => j !== fi) }))} style={{ position: "absolute", top: 2, right: 2, background: "rgba(0,0,0,.55)", border: "none", color: "#fff", borderRadius: "50%", width: 17, height: 17, fontSize: 10, cursor: "pointer" }}>✕</button>
+          </div>))}
         </div>}
-      </div>}
+      </div>))}
 
-      <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>Las fotos y videos</div>
-      <button onClick={() => fileRef.current?.click()} style={{ width: "100%", background: T.card, border: `1.5px dashed ${T.border}`, color: T.text, borderRadius: 12, padding: "18px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", marginBottom: 10 }}><Ico n="cam" s={17} c={T.accent} /> {archivos.length ? `Agregar más (${archivos.length} elegidas)` : "Elegir fotos y videos del viaje"}</button>
-      <input ref={fileRef} type="file" accept="image/*,video/*" multiple onChange={elegirArchivos} style={{ display: "none" }} />
-      {archivos.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 16 }}>
-        {archivos.map((f, i) => (<div key={i} style={{ position: "relative", width: 72, height: 72, borderRadius: 9, overflow: "hidden", border: `1px solid ${T.border}`, background: T.card2 }}>
-          {f.type.startsWith("video") ? <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🎬</div> : <img src={URL.createObjectURL(f)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
-          <button onClick={() => sacarArchivo(i)} style={{ position: "absolute", top: 3, right: 3, background: "rgba(0,0,0,.55)", border: "none", color: "#fff", borderRadius: "50%", width: 20, height: 20, fontSize: 11, cursor: "pointer" }}>✕</button>
-        </div>))}
-      </div>}
+      <button onClick={agregarEtapa} style={{ width: "100%", background: "none", border: `1.5px dashed ${T.accent}`, color: T.accent, borderRadius: T.r, padding: "13px", fontSize: 13, fontWeight: 800, cursor: "pointer", marginBottom: 20 }}><Ico n="mas" s={15} /> Agregar otra etapa del recorrido</button>
 
       <button onClick={crear} disabled={subiendo} style={{ width: "100%", background: subiendo ? T.card2 : T.accent, border: "none", color: subiendo ? T.sub : "#1a1205", borderRadius: T.rsm, padding: "15px", fontSize: 14.5, fontWeight: 800, cursor: "pointer" }}>{subiendo ? `Guardando el viaje… ${prog}%` : "✓ Guardar como viaje vivido"}</button>
     </div>
