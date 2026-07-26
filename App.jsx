@@ -222,7 +222,7 @@ async function dondeEstoy() {
 const extraerJSON = (t) => { const m = t.match(/\[[\s\S]*\]/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.10 · 26 jul 2026";
+const APP_VER = "v10.11 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1779,15 +1779,24 @@ function NuevoVivido({ onCrear, cerrar }) {
     setSubiendo(true); setProg(0);
     const viajeId = uid();
     const mediaIds = [];
+    const errores = [];
     for (let i = 0; i < archivos.length; i++) {
       const f = archivos[i];
-      if (f.size > 150 * 1024 * 1024) continue;
+      if (f.size > 150 * 1024 * 1024) { errores.push(`${f.name}: pesa más de 150 MB`); setProg(Math.round(((i + 1) / archivos.length) * 100)); continue; }
       const esVideo = f.type.startsWith("video");
-      const blob = esVideo ? f : await comprimirFoto(f);
+      let blob;
+      try { blob = esVideo ? f : await comprimirFoto(f); } catch (e) { errores.push(`${f.name}: no pude procesarla (${e.message || "archivo dañado"})`); setProg(Math.round(((i + 1) / archivos.length) * 100)); continue; }
       const id = uid();
-      try { await mediaGuardar({ id, viajeId, tipo: esVideo ? "video" : "foto", blob, nombre: f.name, ts: Date.now() }); mediaIds.push(id); } catch { }
+      try { await mediaGuardar({ id, viajeId, tipo: esVideo ? "video" : "foto", blob, nombre: f.name, ts: Date.now() }); mediaIds.push(id); }
+      catch (e) { errores.push(`${f.name}: no se pudo guardar (${e && e.message || e || "espacio de almacenamiento lleno o bloqueado"})`); }
       setProg(Math.round(((i + 1) / archivos.length) * 100));
     }
+    if (mediaIds.length === 0) {
+      setSubiendo(false);
+      alert(`No pude guardar ninguna foto/video.\n\n${errores.slice(0, 4).join("\n")}${errores.length > 4 ? `\n… y ${errores.length - 4} más` : ""}\n\nProbá con menos archivos por vez, o revisá que el teléfono tenga espacio libre.`);
+      return;
+    }
+    if (errores.length > 0) alert(`Se guardaron ${mediaIds.length} de ${archivos.length}. No se pudieron guardar:\n${errores.slice(0, 4).join("\n")}`);
     const entrada = { id: uid(), fecha, texto: "", mediaIds, lugar: lugarSel ? { nombre: lugarSel.nombre.split(",").slice(0, 2).join(","), lat: lugarSel.lat, lon: lugarSel.lon } : null };
     const viaje = { id: viajeId, nombre: nombre.trim(), creado: Date.now(), vivido: true, puntos: lugarSel ? [{ nombre: lugarSel.nombre, lat: lugarSel.lat, lon: lugarSel.lon }] : [], sugerencias: [], bitacora: [entrada], fechaInicio: fecha, diasVacaciones: "" };
     onCrear(viaje);
