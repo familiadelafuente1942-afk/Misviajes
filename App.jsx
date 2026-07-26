@@ -92,6 +92,24 @@ async function comprimirFoto(file) {
   });
 }
 
+/* Corre varias tareas a la vez (concurrencia limitada) en vez de una
+   por una en fila. onProgreso se llama cada vez que UNA termina, con
+   el total de terminadas hasta ese momento — para la barra de %. */
+async function procesarEnParalelo(items, tarea, concurrencia, onProgreso) {
+  const resultados = new Array(items.length);
+  let siguiente = 0, terminadas = 0;
+  async function trabajador() {
+    while (siguiente < items.length) {
+      const i = siguiente++;
+      try { resultados[i] = { ok: true, valor: await tarea(items[i], i) }; }
+      catch (e) { resultados[i] = { ok: false, error: e }; }
+      terminadas++; if (onProgreso) onProgreso(terminadas, items.length);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrencia, items.length) }, trabajador));
+  return resultados;
+}
+
 /* ── EXIF GPS: la foto sabe de dónde es ──────────────────────────
    Lee las coordenadas escondidas en el archivo (metadata EXIF), sin
    subir nada a ningún lado — todo pasa en el teléfono. Si la foto no
@@ -233,7 +251,7 @@ async function dondeEstoy() {
 const extraerJSON = (t) => { const m = t.match(/\[[\s\S]*\]/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.13 · 26 jul 2026";
+const APP_VER = "v10.14 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -480,6 +498,7 @@ function Bitacora({ viaje, actualizar, media, recargarMedia }) {
   const [texto, setTexto] = useState("");
   const [fecha, setFecha] = useState(hoyISO());
   const [subiendo, setSubiendo] = useState(false);
+  const [subiendoProg, setSubiendoProg] = useState(0);
   const [pendMedia, setPendMedia] = useState([]);
   const [lugar, setLugar] = useState(null);         // {nombre, lat, lon} — el ancla en el mapa
   const [buscandoGPS, setBuscandoGPS] = useState(false);
@@ -497,19 +516,23 @@ function Bitacora({ viaje, actualizar, media, recargarMedia }) {
   async function onArchivos(e) {
     const files = Array.from(e.target.files || []); e.target.value = "";
     if (!files.length) return;
-    setSubiendo(true);
-    const ids = [];
-    for (const f of files) {
-      if (f.size > 150 * 1024 * 1024) { alert(`"${f.name}" pesa demasiado (máx 150 MB).`); continue; }
+    setSubiendo(true); setSubiendoProg(0);
+    const pesadas = files.filter(f => f.size > 150 * 1024 * 1024);
+    if (pesadas.length) alert(`${pesadas.map(f => `"${f.name}"`).join(", ")} pesa${pesadas.length > 1 ? "n" : ""} más de 150 MB, no se ${pesadas.length > 1 ? "suben" : "sube"}.`);
+    const buenas = files.filter(f => f.size <= 150 * 1024 * 1024);
+    const resultados = await procesarEnParalelo(buenas, async (f) => {
       const esVideo = f.type.startsWith("video");
       const blob = esVideo ? f : await comprimirFoto(f);
       const id = uid();
-      try { await mediaGuardar({ id, viajeId: viaje.id, tipo: esVideo ? "video" : "foto", blob, nombre: f.name, ts: Date.now() }); ids.push(id); }
-      catch { alert(`No pude guardar "${f.name}" (¿sin espacio?).`); }
-    }
+      await mediaGuardar({ id, viajeId: viaje.id, tipo: esVideo ? "video" : "foto", blob, nombre: f.name, ts: Date.now() });
+      return id;
+    }, 4, (hechas, total) => setSubiendoProg(Math.round((hechas / total) * 100)));
+    const ids = resultados.filter(r => r.ok).map(r => r.valor);
+    const fallidas = resultados.filter(r => !r.ok).length;
+    if (fallidas) alert(`${fallidas} archivo${fallidas > 1 ? "s" : ""} no se pudo${fallidas > 1 ? "n" : ""} guardar (¿sin espacio en el teléfono?).`);
     setPendMedia(p => [...p, ...ids]);
     await recargarMedia();
-    if (!lugar) { for (const f of files) { const l = await lugarDesdeFoto(f); if (l) { setLugar({ ...l, detectado: true }); break; } } }
+    if (!lugar) { for (const f of buenas) { const l = await lugarDesdeFoto(f); if (l) { setLugar({ ...l, detectado: true }); break; } } }
     setSubiendo(false);
   }
 
@@ -557,7 +580,7 @@ function Bitacora({ viaje, actualizar, media, recargarMedia }) {
         {buscarLugar && !lugar && <div style={{ marginTop: 8 }}><BuscarLugar placeholder="Buscar el lugar del recuerdo…" onElegir={(r) => { setLugar({ nombre: r.nombre.split(",").slice(0, 2).join(","), lat: r.lat, lon: r.lon }); setBuscarLugar(false); }} /></div>}
       </div>
       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-        <button onClick={() => fileRef.current?.click()} disabled={subiendo} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 10, padding: "11px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}><Ico n="cam" s={15} c={T.accent} /> {subiendo ? "Guardando…" : "Fotos / videos"}</button>
+        <button onClick={() => fileRef.current?.click()} disabled={subiendo} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 10, padding: "11px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}><Ico n="cam" s={15} c={T.accent} /> {subiendo ? `Guardando… ${subiendoProg}%` : "Fotos / videos"}</button>
         <button onClick={publicar} disabled={subiendo} style={{ flex: 1, background: T.accent, border: "none", color: "#1a1205", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>Guardar en la bitácora</button>
       </div>
       <input ref={fileRef} type="file" accept="image/*,video/*" multiple onChange={onArchivos} style={{ display: "none" }} />
@@ -1791,19 +1814,17 @@ function NuevoVivido({ onCrear, cerrar }) {
     if (!archivos.length) { alert("Elegí al menos una foto o video."); return; }
     setSubiendo(true); setProg(0);
     const viajeId = uid();
-    const mediaIds = [];
-    const errores = [];
-    for (let i = 0; i < archivos.length; i++) {
-      const f = archivos[i];
-      if (f.size > 150 * 1024 * 1024) { errores.push(`${f.name}: pesa más de 150 MB`); setProg(Math.round(((i + 1) / archivos.length) * 100)); continue; }
+    const pesadas = archivos.filter(f => f.size > 150 * 1024 * 1024);
+    const buenas = archivos.filter(f => f.size <= 150 * 1024 * 1024);
+    const resultados = await procesarEnParalelo(buenas, async (f) => {
       const esVideo = f.type.startsWith("video");
-      let blob;
-      try { blob = esVideo ? f : await comprimirFoto(f); } catch (e) { errores.push(`${f.name}: no pude procesarla (${e.message || "archivo dañado"})`); setProg(Math.round(((i + 1) / archivos.length) * 100)); continue; }
+      const blob = esVideo ? f : await comprimirFoto(f);
       const id = uid();
-      try { await mediaGuardar({ id, viajeId, tipo: esVideo ? "video" : "foto", blob, nombre: f.name, ts: Date.now() }); mediaIds.push(id); }
-      catch (e) { errores.push(`${f.name}: no se pudo guardar (${e && e.message || e || "espacio de almacenamiento lleno o bloqueado"})`); }
-      setProg(Math.round(((i + 1) / archivos.length) * 100));
-    }
+      await mediaGuardar({ id, viajeId, tipo: esVideo ? "video" : "foto", blob, nombre: f.name, ts: Date.now() });
+      return id;
+    }, 4, (hechas, total) => setProg(Math.round((hechas / total) * 100)));
+    const mediaIds = resultados.filter(r => r.ok).map(r => r.valor);
+    const errores = [...pesadas.map(f => `${f.name}: pesa más de 150 MB`), ...resultados.filter(r => !r.ok).map(r => `no se pudo guardar (${r.error && r.error.message || r.error || "espacio lleno o bloqueado"})`)];
     if (mediaIds.length === 0) {
       setSubiendo(false);
       alert(`No pude guardar ninguna foto/video.\n\n${errores.slice(0, 4).join("\n")}${errores.length > 4 ? `\n… y ${errores.length - 4} más` : ""}\n\nProbá con menos archivos por vez, o revisá que el teléfono tenga espacio libre.`);
