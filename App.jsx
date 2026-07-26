@@ -162,7 +162,7 @@ async function dondeEstoy() {
 const extraerJSON = (t) => { const m = t.match(/\[[\s\S]*\]/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.5 · 26 jul 2026";
+const APP_VER = "v10.7 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -261,6 +261,7 @@ function Ico({ n, s = 16, c = "currentColor" }) {
     plata: "M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v10M9.5 9.5c0-1 1-1.8 2.5-1.8s2.5.8 2.5 1.8-1 1.5-2.5 1.8-2.5.8-2.5 1.8 1 1.8 2.5 1.8 2.5-.8 2.5-1.8",
     valija: "M7 8V6a2 2 0 012-2h6a2 2 0 012 2v2M4 8h16v12H4zM9 8v12M15 8v12",
     ticket: "M4 9a2 2 0 002-2h12a2 2 0 002 2v2a2 2 0 000 4v2a2 2 0 00-2 2H6a2 2 0 00-2-2v-2a2 2 0 000-4V9zM13 6v2M13 11v2M13 16v2",
+    nota: "M9 18a3 3 0 11-6 0 3 3 0 016 0zM21 16a3 3 0 11-6 0 3 3 0 016 0zM9 18V5l12-2v13",
   };
   return (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, verticalAlign: "-2px" }}><path d={P[n] || ""} /></svg>);
 }
@@ -703,6 +704,141 @@ function ClipMaker({ viaje, media }) {
       <video src={clipUrl} controls playsInline style={{ width: "100%", borderRadius: T.rsm, background: "#000" }} />
       <button onClick={guardarClip} style={{ width: "100%", marginTop: 9, background: T.card, border: `1px solid ${T.accent}`, color: T.accent, borderRadius: T.rsm, padding: "13px", fontSize: 13.5, fontWeight: 800, cursor: "pointer" }}><Ico n="descargar" s={15} /> Guardar / compartir el clip</button>
     </div>}
+  </div>);
+}
+
+/* ═══ DEL LUGAR: lo que se come y lo que suena en cada parada ═════
+   La otra mitad del viaje: la mesa y la música. La IA arma la guía por
+   región según su perfil, y cada artista abre DIRECTO en Spotify. */
+/* ── VOZ: hablarle al copiloto y que conteste hablando ─────────────
+   Reconocimiento continuo (se reengancha solo cuando iOS lo corta),
+   3 segundos de silencio = envía. La respuesta se lee con la voz del
+   sistema si la pregunta entró hablando. */
+const PAUSA_VOZ = 3000;
+function limpiarVozTexto(t) {
+  return String(t || "").replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "").replace(/[*_#>`]/g, "").replace(/\s+/g, " ").trim();
+}
+function hablarTexto(texto) {
+  try {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(limpiarVozTexto(texto).slice(0, 1200));
+    u.lang = "es-AR"; u.rate = 1.02;
+    const voces = window.speechSynthesis.getVoices() || [];
+    const v2 = voces.find(x => /es[-_](AR|MX|US|419)/i.test(x.lang)) || voces.find(x => /^es/i.test(x.lang));
+    if (v2) u.voice = v2;
+    window.speechSynthesis.speak(u);
+  } catch { }
+}
+function usarDictado({ setTexto, onEnviar }) {
+  const [escuchando, setEscuchando] = useState(false);
+  const recRef = useRef(null);
+  const dictRef = useRef({ activo: false, base: "" });
+  const silRef = useRef(null);
+  const limpiarSil = () => { if (silRef.current) { clearTimeout(silRef.current); silRef.current = null; } };
+
+  function arrancar(reanudar) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let rec; try { rec = new SR(); } catch { setEscuchando(false); return; }
+    rec.lang = "es-AR"; rec.interimResults = true; rec.continuous = true;
+    if (!reanudar) dictRef.current = { activo: true, base: "" };
+    rec.onresult = (e) => {
+      if (!dictRef.current.activo) return;
+      let fin = "", inter = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) { const t = e.results[i][0].transcript; if (e.results[i].isFinal) fin += t; else inter += t; }
+      setTexto((dictRef.current.base + fin + inter).replace(/\s+/g, " ").trimStart());
+      if (fin) dictRef.current.base += fin;
+      limpiarSil();
+      silRef.current = setTimeout(() => parar(true), PAUSA_VOZ);
+    };
+    rec.onend = () => { recRef.current = null; if (dictRef.current.activo) arrancar(true); else setEscuchando(false); };
+    rec.onerror = (e) => {
+      recRef.current = null; const err = e && e.error;
+      if (dictRef.current.activo && (err === "no-speech" || err === "aborted" || err === "network")) { arrancar(true); return; }
+      dictRef.current.activo = false; limpiarSil(); setEscuchando(false);
+    };
+    recRef.current = rec; setEscuchando(true);
+    try { rec.start(); } catch { setEscuchando(false); }
+  }
+  function parar(mandar) {
+    limpiarSil(); dictRef.current.activo = false;
+    if (recRef.current) { try { recRef.current.stop(); } catch { } }
+    setEscuchando(false);
+    if (mandar) setTimeout(() => onEnviar(), 150);
+  }
+  function toggle() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert("Este navegador no permite dictar. Usá el micrófono del teclado."); return; }
+    try { window.speechSynthesis?.cancel(); } catch { }
+    if (escuchando) { parar(true); return; }
+    arrancar(false);
+  }
+  return { escuchando, toggle };
+}
+function BotonMic({ escuchando, onClick }) {
+  return (<button onClick={onClick} style={{ background: escuchando ? "#DC2626" : T.card2, border: `1px solid ${escuchando ? "#DC2626" : T.border}`, color: escuchando ? "#fff" : T.sub, borderRadius: 12, padding: "0 14px", cursor: "pointer", fontSize: 16, minWidth: 46 }}>{escuchando ? "◉" : "🎙"}</button>);
+}
+
+function abrirSpotify(q) { window.open(`https://open.spotify.com/search/${encodeURIComponent(q)}`, "_blank"); }
+function DelLugarTab({ viaje, perfil, actualizar }) {
+  const guia = (viaje.guiaLugar && Array.isArray(viaje.guiaLugar.regiones)) ? viaje.guiaLugar : null;
+  const [armando, setArmando] = useState(false);
+
+  async function armar() {
+    if (!(viaje.puntos || []).length) { alert("Cargá el recorrido primero (pestaña Ruta)."); return; }
+    setArmando(true);
+    try {
+      const destinos = viaje.puntos.map(p => p.nombre.split(",").slice(0, 2).join(",")).join(" · ");
+      const sys = "Sos un guía cultural y gastronómico experto, con conocimiento profundo de la música y la cocina de cada región del mundo. Respondés SOLO con JSON válido, sin texto adicional ni markdown.";
+      const prompt = `${perfil ? `Así viaja esta gente: ${perfil}\n\n` : ""}Este es su recorrido: ${destinos}\n\nArmá la guía de COMIDAS TÍPICAS y MÚSICA de cada región del recorrido (agrupá paradas cercanas en la misma región; máximo 4 regiones). Comidas: los platos imperdibles con qué son y dónde/cómo probarlos de verdad (mercados, peñas, parajes — no cadenas). Música: el género de la región, 3-4 artistas emblemáticos (clásicos y actuales) y 2-3 canciones que son LA banda sonora de ese lugar.\n\nRespondé SOLO este JSON:\n{"regiones":[{"nombre":"Quebrada de Humahuaca","comidas":[{"plato":"...","desc":"qué es, 1 frase","donde":"dónde probarlo"}],"genero":"...","artistas":[{"nombre":"...","desc":"1 frase de por qué escucharlo"}],"canciones":["Tema — Artista"]}]}`;
+      const resp = await llamarIA([{ role: "user", content: prompt }], sys, 3000);
+      const m = resp.match(/\{[\s\S]*\}/);
+      const plan = m ? JSON.parse(m[0]) : null;
+      if (!plan?.regiones?.length) throw new Error("La IA no devolvió la guía. Probá de nuevo.");
+      actualizar({ ...viaje, guiaLugar: { regiones: plan.regiones, armadaEl: hoyISO() } });
+    } catch (e) { alert(e.message); }
+    setArmando(false);
+  }
+
+  return (<div>
+    {!guia && <div style={{ background: "linear-gradient(135deg, rgba(232,163,61,.12), rgba(77,163,255,.07))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: 16, textAlign: "center" }}>
+      <div style={{ fontSize: 34, marginBottom: 6 }}>🎶🍽</div>
+      <div style={{ fontSize: 14.5, fontWeight: 800, color: T.text, marginBottom: 5 }}>Lo que se come y lo que suena</div>
+      <div style={{ fontSize: 12.5, color: T.sub, lineHeight: 1.6, marginBottom: 13 }}>La IA arma la guía de tu recorrido: los platos imperdibles de cada región, dónde probarlos de verdad, y la música del lugar — con cada artista listo para sonar en Spotify. La banda sonora del viaje, antes de salir.</div>
+      <button onClick={armar} disabled={armando} style={{ background: armando ? T.card2 : T.accent, border: "none", color: armando ? T.sub : "#1a1205", borderRadius: T.rsm, padding: "13px 22px", fontSize: 13.5, fontWeight: 800, cursor: "pointer" }}>{armando ? "Armando la guía…" : "✨ Armar la guía del viaje"}</button>
+    </div>}
+
+    {guia && <>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+        <button onClick={() => { if (confirm("¿Rehacer la guía con la IA?")) armar(); }} disabled={armando} style={{ background: T.card, border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{armando ? "…" : "Rehacer"}</button>
+      </div>
+      {guia.regiones.map((r, ri) => (<div key={ri} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "14px 15px", marginBottom: 12 }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: T.accent, marginBottom: 10 }}>📍 {r.nombre}</div>
+
+        {(r.comidas || []).length > 0 && <>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 7 }}>🍽 Para comer</div>
+          {r.comidas.map((c2, ci) => (<div key={ci} style={{ marginBottom: 9, paddingLeft: 10, borderLeft: `2px solid ${T.border}` }}>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: T.text }}>{c2.plato}</div>
+            <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.5, marginTop: 1 }}>{c2.desc}</div>
+            {c2.donde && <div style={{ fontSize: 11.5, color: T.accent, marginTop: 2, fontWeight: 700 }}>→ {c2.donde}</div>}
+          </div>))}
+        </>}
+
+        <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".07em", margin: "12px 0 7px" }}>🎶 Para escuchar{r.genero ? ` — ${r.genero}` : ""}</div>
+        {(r.artistas || []).map((a, ai) => (<div key={ai} style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 7 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: T.text }}>{a.nombre}</div>
+            {a.desc && <div style={{ fontSize: 11.5, color: T.sub, lineHeight: 1.45 }}>{a.desc}</div>}
+          </div>
+          <button onClick={() => abrirSpotify(a.nombre)} style={{ background: "#1DB954", border: "none", color: "#fff", borderRadius: 999, padding: "8px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer", flexShrink: 0 }}>▶ Spotify</button>
+        </div>))}
+        {(r.canciones || []).length > 0 && <div style={{ marginTop: 8, background: T.card2, borderRadius: 10, padding: "9px 11px" }}>
+          <div style={{ fontSize: 10.5, color: T.muted, marginBottom: 4 }}>La banda sonora:</div>
+          {r.canciones.map((cn, ci) => (<div key={ci} onClick={() => abrirSpotify(cn)} style={{ fontSize: 12.5, color: T.text, padding: "4px 0", cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}><span style={{ color: "#1DB954", fontSize: 11 }}>▶</span> {cn}</div>))}
+        </div>}
+        <button onClick={() => abrirSpotify(`${r.genero || "música"} ${r.nombre}`)} style={{ width: "100%", marginTop: 10, background: "#1DB954", border: "none", color: "#fff", borderRadius: 10, padding: "11px", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>▶ Playlists de {r.nombre} en Spotify</button>
+      </div>))}
+    </>}
   </div>);
 }
 
@@ -1227,6 +1363,10 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
   const [chatMsgs, setChatMsgs] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
+  const porVozRefC = useRef(false);
+  const chatInputRef = useRef(""); chatInputRef.current = chatInput;
+  const enviarRefC = useRef(null);
+  const dictadoC = usarDictado({ setTexto: setChatInput, onEnviar: () => { porVozRefC.current = true; enviarRefC.current && enviarRefC.current(); } });
   const [media, setMedia] = useState([]);
   const chatEndRef = useRef(null);
   const [climaResumen, setClimaResumen] = useState("");
@@ -1273,7 +1413,7 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
   }
 
   async function enviarChat() {
-    const t = chatInput.trim(); if (!t || chatBusy) return;
+    const t = chatInputRef.current.trim(); if (!t || chatBusy) return;
     setChatInput("");
     const msgs = [...chatMsgs, { role: "user", content: t }];
     setChatMsgs(msgs); setChatBusy(true);
@@ -1281,9 +1421,11 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
       const sys = `Sos el copiloto de viaje de la app Mis Viajes. Conocés rutas, pueblos, comida y lugares de Argentina y el mundo. Contestás en voseo, cálido y concreto, como un amigo que ya hizo ese viaje.${perfil ? ` Así viaja esta gente (tenelo SIEMPRE en cuenta): ${perfil}.` : ""} Viaje actual:\n${resumenPuntos()}${ruta ? `\nDistancia: ${kmFmt(ruta.dist)} — Manejo: ${hFmt(ruta.dur)}` : ""}${viaje.fechaInicio ? `\nSalida: ${viaje.fechaInicio} · ${viaje.diasVacaciones || "?"} días de vacaciones` : ""}${climaResumen ? `\nPronóstico por punto del recorrido (días con alertas):\n${climaResumen}\nSi te preguntan si conviene postergar o correr la salida, usá estos datos y sé concreto.` : ""}${(viaje.gastos || []).length ? `\nGastos: llevan gastado ${(viaje.gastos || []).reduce((s2, g) => s2 + (Number(g.monto) || 0), 0)} ${viaje.moneda || "ARS"}${viaje.presupuesto ? ` de un presupuesto de ${viaje.presupuesto}` : ""}.` : ""}`;
       const resp = await llamarIA(msgs.slice(-12), sys, 1500);
       setChatMsgs(prev => [...prev, { role: "assistant", content: resp }]);
+      if (porVozRefC.current) { porVozRefC.current = false; hablarTexto(resp); }
     } catch { setChatMsgs(prev => [...prev, { role: "assistant", content: "Uy, no pude responder (¿hay internet?). Probá de nuevo." }]); }
     setChatBusy(false);
   }
+  enviarRefC.current = enviarChat;
 
   function abrirAppleMaps() {
     // Apple Maps es el navegador nativo de CarPlay: lo que abras acá
@@ -1304,7 +1446,7 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
     window.open(`https://www.google.com/maps/dir/?api=1&origin=${o.lat},${o.lon}&destination=${d.lat},${d.lon}${wp ? `&waypoints=${encodeURIComponent(wp)}` : ""}&travelmode=driving`, "_blank");
   }
 
-  const TABS = [["ruta", "Ruta", "mapa"], ["reservas", "Reservas", "ticket"], ["clima", "Clima", "sol"], ["gastos", "Gastos", "plata"], ["valija", "Valija", "valija"], ["bitacora", "Bitácora", "libro"], ["clip", "Clip", "peli"]];
+  const TABS = [["ruta", "Ruta", "mapa"], ["reservas", "Reservas", "ticket"], ["clima", "Clima", "sol"], ["lugar", "Del lugar", "nota"], ["gastos", "Gastos", "plata"], ["valija", "Valija", "valija"], ["bitacora", "Bitácora", "libro"], ["clip", "Clip", "peli"]];
 
   return (<div style={{ minHeight: "100vh", paddingBottom: 90 }}>
     <div style={{ padding: "14px 16px 0", paddingTop: "max(14px, env(safe-area-inset-top))" }}>
@@ -1389,6 +1531,7 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
 
       {tab === "clima" && <ClimaTab viaje={viaje} onResumen={setClimaResumen} />}
       {tab === "reservas" && <ReservasTab viaje={viaje} />}
+      {tab === "lugar" && <DelLugarTab viaje={viaje} perfil={perfil} actualizar={actualizar} />}
       {tab === "gastos" && <GastosTab viaje={viaje} actualizar={actualizar} />}
       {tab === "valija" && <ValijaTab viaje={viaje} perfil={perfil} climaResumen={climaResumen} actualizar={actualizar} />}
       {tab === "bitacora" && <Bitacora viaje={viaje} actualizar={actualizar} media={media} recargarMedia={recargarMedia} />}
@@ -1413,9 +1556,13 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
         {chatBusy && <div style={{ color: T.sub, fontSize: 12.5 }}>Pensando…</div>}
         <div ref={chatEndRef} />
       </div>
-      <div style={{ padding: "10px 14px", paddingBottom: "max(12px, env(safe-area-inset-bottom))", borderTop: `1px solid ${T.border}`, display: "flex", gap: 8 }}>
-        <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === "Enter" && enviarChat()} placeholder="Preguntale al copiloto…" style={{ flex: 1, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 14px", fontSize: 14, color: T.text, outline: "none" }} />
-        <button onClick={enviarChat} disabled={chatBusy} style={{ background: T.accent, border: "none", color: "#1a1205", borderRadius: 12, padding: "0 16px", fontWeight: 800, cursor: "pointer" }}><Ico n="flecha" s={17} /></button>
+      <div style={{ padding: "10px 14px", paddingBottom: "max(12px, env(safe-area-inset-bottom))", borderTop: `1px solid ${T.border}` }}>
+        {dictadoC.escuchando && <div style={{ fontSize: 11.5, color: "#DC2626", fontWeight: 800, textAlign: "center", marginBottom: 7 }}>◉ Escuchando… quedate {PAUSA_VOZ / 1000} segundos en silencio y lo mando</div>}
+        <div style={{ display: "flex", gap: 8 }}>
+          <BotonMic escuchando={dictadoC.escuchando} onClick={dictadoC.toggle} />
+          <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === "Enter" && enviarChat()} placeholder="Hablá o escribí…" style={{ flex: 1, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 14px", fontSize: 14, color: T.text, outline: "none", minWidth: 0 }} />
+          <button onClick={enviarChat} disabled={chatBusy} style={{ background: T.accent, border: "none", color: "#1a1205", borderRadius: 12, padding: "0 16px", fontWeight: 800, cursor: "pointer" }}><Ico n="flecha" s={17} /></button>
+        </div>
       </div>
     </div>}
   </div>);
@@ -1464,12 +1611,16 @@ function ChatIdeas({ cfg, viajes }) {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const endRef = useRef(null);
+  const porVozRef = useRef(false);
+  const inputRef2 = useRef(""); inputRef2.current = input;
+  const dictado = usarDictado({ setTexto: setInput, onEnviar: () => { porVozRef.current = true; enviarRefI.current && enviarRefI.current(); } });
+  const enviarRefI = useRef(null);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, busy]);
 
   const SUGERIDAS = ["Tengo 4 días, ¿a dónde me recomendás?", "Escapada en auto, ¿qué hay lindo cerca?", "¿A dónde conviene ir en esta época?", "Sorprendeme con un destino"];
 
   async function enviar(texto) {
-    const t = (texto ?? input).trim(); if (!t || busy) return;
+    const t = (texto ?? inputRef2.current).trim(); if (!t || busy) return;
     setInput("");
     const nuevos = [...msgs, { role: "user", content: t }];
     setMsgs(nuevos); setBusy(true);
@@ -1480,9 +1631,11 @@ function ChatIdeas({ cfg, viajes }) {
       const sys = `Sos el copiloto de ideas de la app Mis Viajes: un amigo viajado que ayuda a elegir el PRÓXIMO destino. Hoy es ${hoy} (tené en cuenta la estación y la época del año). Contestás en voseo, cálido y concreto.${perfil ? ` Así viaja esta gente (planificá SIEMPRE para ellos): ${perfil}.` : ""}${hechos ? ` Viajes que ya tienen en la app (evitá repetirlos salvo que pidan volver): ${hechos}.` : ""} Cuando recomiendes destinos: da 2 o 3 opciones concretas con el porqué pensado para ellos (qué comer, qué ver, cuántos km o cómo llegar). Si falta un dato clave (días, época, desde dónde), preguntalo corto. Cerrá sugiriendo que cuando elijan, creen el viaje en la app y la IA les arma el itinerario completo.`;
       const resp = await llamarIA(nuevos.slice(-12), sys, 1600);
       setMsgs(prev => [...prev, { role: "assistant", content: resp }]);
+      if (porVozRef.current) { porVozRef.current = false; hablarTexto(resp); }
     } catch { setMsgs(prev => [...prev, { role: "assistant", content: "Uy, no pude responder (¿hay internet?). Probá de nuevo." }]); }
     setBusy(false);
   }
+  enviarRefI.current = enviar;
 
   return (<>
     {/* la tarjeta-invitación en la portada */}
@@ -1514,10 +1667,14 @@ function ChatIdeas({ cfg, viajes }) {
         {busy && <div style={{ color: T.sub, fontSize: 12.5 }}>Pensando destinos…</div>}
         <div ref={endRef} />
       </div>
-      <div style={{ padding: "10px 14px", paddingBottom: "max(12px, env(safe-area-inset-bottom))", borderTop: `1px solid ${T.border}`, display: "flex", gap: 8 }}>
-        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && enviar()} placeholder="Che, ¿a dónde me recomendás ir…?"
-          style={{ flex: 1, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 14px", fontSize: 14, color: T.text, outline: "none" }} />
-        <button onClick={() => enviar()} disabled={busy} style={{ background: T.accent, border: "none", color: "#1a1205", borderRadius: 12, padding: "0 16px", fontWeight: 800, cursor: "pointer" }}><Ico n="flecha" s={17} /></button>
+      <div style={{ padding: "10px 14px", paddingBottom: "max(12px, env(safe-area-inset-bottom))", borderTop: `1px solid ${T.border}` }}>
+        {dictado.escuchando && <div style={{ fontSize: 11.5, color: "#DC2626", fontWeight: 800, textAlign: "center", marginBottom: 7 }}>◉ Escuchando… quedate {PAUSA_VOZ / 1000} segundos en silencio y lo mando</div>}
+        <div style={{ display: "flex", gap: 8 }}>
+          <BotonMic escuchando={dictado.escuchando} onClick={dictado.toggle} />
+          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && enviar()} placeholder="Hablá o escribí: ¿a dónde vamos…?"
+            style={{ flex: 1, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 14px", fontSize: 14, color: T.text, outline: "none", minWidth: 0 }} />
+          <button onClick={() => enviar()} disabled={busy} style={{ background: T.accent, border: "none", color: "#1a1205", borderRadius: 12, padding: "0 16px", fontWeight: 800, cursor: "pointer" }}><Ico n="flecha" s={17} /></button>
+        </div>
       </div>
     </div>}
   </>);
