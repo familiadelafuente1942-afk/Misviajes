@@ -222,7 +222,7 @@ async function dondeEstoy() {
 const extraerJSON = (t) => { const m = t.match(/\[[\s\S]*\]/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.9 · 26 jul 2026";
+const APP_VER = "v10.10 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -882,7 +882,7 @@ function DelLugarTab({ viaje, perfil, actualizar }) {
           {r.comidas.map((c2, ci) => (<div key={ci} style={{ marginBottom: 9, paddingLeft: 10, borderLeft: `2px solid ${T.border}` }}>
             <div style={{ fontSize: 13.5, fontWeight: 800, color: T.text }}>{c2.plato}</div>
             <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.5, marginTop: 1 }}>{c2.desc}</div>
-            {c2.donde && <div style={{ fontSize: 11.5, color: T.accent, marginTop: 2, fontWeight: 700 }}>→ {c2.donde}</div>}
+            {c2.donde && <div onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(c2.donde + " " + r.nombre)}`, "_blank")} style={{ fontSize: 11.5, color: T.accent, marginTop: 4, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(232,163,61,.1)", border: `1px solid ${T.accent}`, borderRadius: 8, padding: "5px 9px" }}><Ico n="gmaps" s={12} c={T.accent} /> {c2.donde}</div>}
           </div>))}
         </>}
 
