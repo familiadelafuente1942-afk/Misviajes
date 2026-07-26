@@ -162,7 +162,7 @@ async function dondeEstoy() {
 const extraerJSON = (t) => { const m = t.match(/\[[\s\S]*\]/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.7 · 26 jul 2026";
+const APP_VER = "v10.8 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -262,6 +262,7 @@ function Ico({ n, s = 16, c = "currentColor" }) {
     valija: "M7 8V6a2 2 0 012-2h6a2 2 0 012 2v2M4 8h16v12H4zM9 8v12M15 8v12",
     ticket: "M4 9a2 2 0 002-2h12a2 2 0 002 2v2a2 2 0 000 4v2a2 2 0 00-2 2H6a2 2 0 00-2-2v-2a2 2 0 000-4V9zM13 6v2M13 11v2M13 16v2",
     nota: "M9 18a3 3 0 11-6 0 3 3 0 016 0zM21 16a3 3 0 11-6 0 3 3 0 016 0zM9 18V5l12-2v13",
+    reloj: "M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 3",
   };
   return (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, verticalAlign: "-2px" }}><path d={P[n] || ""} /></svg>);
 }
@@ -1594,7 +1595,7 @@ function CardViaje({ v, onAbrir, onBorrar }) {
     <div style={{ position: "relative", padding: "15px 16px", display: "flex", alignItems: "flex-end", minHeight: fotos.length ? 150 : 76, boxSizing: "border-box" }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 16, fontWeight: 800, color: "#fff", textShadow: fotos.length ? "0 1px 6px rgba(0,0,0,.6)" : "none" }}>{v.nombre}</div>
-        <div style={{ fontSize: 11.5, color: fotos.length ? "rgba(255,255,255,.85)" : T.sub, marginTop: 2, textShadow: fotos.length ? "0 1px 4px rgba(0,0,0,.6)" : "none" }}>{o && d ? `${o} → ${d}` : o ? `Desde ${o}` : "Sin recorrido aún"}{v.fechaInicio ? ` · sale ${fFecha(v.fechaInicio)}` : ""}{nEnt ? ` · ${nEnt} recuerdo${nEnt > 1 ? "s" : ""}` : ""}</div>
+        <div style={{ fontSize: 11.5, color: fotos.length ? "rgba(255,255,255,.85)" : T.sub, marginTop: 2, textShadow: fotos.length ? "0 1px 4px rgba(0,0,0,.6)" : "none" }}>{v.vivido ? "📷 Viaje vivido" : (o && d ? `${o} → ${d}` : o ? `Desde ${o}` : "Sin recorrido aún")}{v.fechaInicio ? ` · ${v.vivido ? fFecha(v.fechaInicio) : "sale " + fFecha(v.fechaInicio)}` : ""}{nEnt ? ` · ${nEnt} recuerdo${nEnt > 1 ? "s" : ""}` : ""}</div>
       </div>
       <button onClick={(e) => { e.stopPropagation(); onBorrar(); }} style={{ background: "rgba(0,0,0,.35)", border: "none", color: "rgba(255,255,255,.8)", borderRadius: 9, cursor: "pointer", padding: "7px 8px" }}><Ico n="tacho" s={15} /></button>
     </div>
@@ -1680,6 +1681,95 @@ function ChatIdeas({ cfg, viajes }) {
   </>);
 }
 
+/* ═══ VIAJE YA VIVIDO: cargar de una las fotos de un viaje pasado ═══ */
+function NuevoVivido({ onCrear, cerrar }) {
+  const fileRef = useRef(null);
+  const [nombre, setNombre] = useState("");
+  const [lugarTxt, setLugarTxt] = useState("");
+  const [lugarSel, setLugarSel] = useState(null);
+  const [buscando, setBuscando] = useState(false);
+  const [resLugar, setResLugar] = useState([]);
+  const [fecha, setFecha] = useState(hoyISO());
+  const [archivos, setArchivos] = useState([]);
+  const [subiendo, setSubiendo] = useState(false);
+  const [prog, setProg] = useState(0);
+
+  async function buscarLugar() {
+    if (!lugarTxt.trim()) return;
+    setBuscando(true);
+    try { setResLugar(await geocodificar(lugarTxt)); } catch { setResLugar([]); }
+    setBuscando(false);
+  }
+  function elegirArchivos(e) { const files = Array.from(e.target.files || []); e.target.value = ""; setArchivos(prev => [...prev, ...files]); }
+  function sacarArchivo(i) { setArchivos(prev => prev.filter((_, j) => j !== i)); }
+
+  async function crear() {
+    if (!nombre.trim()) { alert("Ponele un nombre al viaje."); return; }
+    if (!archivos.length) { alert("Elegí al menos una foto o video."); return; }
+    setSubiendo(true); setProg(0);
+    const viajeId = uid();
+    const mediaIds = [];
+    for (let i = 0; i < archivos.length; i++) {
+      const f = archivos[i];
+      if (f.size > 150 * 1024 * 1024) continue;
+      const esVideo = f.type.startsWith("video");
+      const blob = esVideo ? f : await comprimirFoto(f);
+      const id = uid();
+      try { await mediaGuardar({ id, viajeId, tipo: esVideo ? "video" : "foto", blob, nombre: f.name, ts: Date.now() }); mediaIds.push(id); } catch { }
+      setProg(Math.round(((i + 1) / archivos.length) * 100));
+    }
+    const entrada = { id: uid(), fecha, texto: "", mediaIds, lugar: lugarSel ? { nombre: lugarSel.nombre.split(",").slice(0, 2).join(","), lat: lugarSel.lat, lon: lugarSel.lon } : null };
+    const viaje = { id: viajeId, nombre: nombre.trim(), creado: Date.now(), vivido: true, puntos: lugarSel ? [{ nombre: lugarSel.nombre, lat: lugarSel.lat, lon: lugarSel.lon }] : [], sugerencias: [], bitacora: [entrada], fechaInicio: fecha, diasVacaciones: "" };
+    onCrear(viaje);
+    setSubiendo(false);
+  }
+
+  return (<div style={{ position: "fixed", inset: 0, zIndex: 200, background: T.bg, overflowY: "auto" }}>
+    <div style={{ padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top))", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${T.border}` }}>
+      <button onClick={cerrar} style={{ background: "none", border: "none", color: T.text, cursor: "pointer", padding: 4 }}><Ico n="volver" s={22} /></button>
+      <div style={{ fontSize: 16, fontWeight: 800, color: T.text }}>📷 Un viaje ya vivido</div>
+    </div>
+    <div style={{ padding: 18, paddingBottom: 60 }}>
+      <div style={{ fontSize: 12.5, color: T.sub, lineHeight: 1.6, marginBottom: 18 }}>Para los viajes de antes de la app: subí las fotos de una y quedan guardadas como si las hubieran cargado en su momento — en la bitácora, con su fecha y su lugar en el mapa.</div>
+
+      <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>¿Qué viaje fue?</div>
+      <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Bariloche con los chicos"
+        style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", fontSize: 14, color: T.text, outline: "none", boxSizing: "border-box", marginBottom: 14 }} />
+
+      <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>¿Cuándo fue?</div>
+      <input type="date" value={fecha} max={hoyISO()} onChange={e => setFecha(e.target.value)}
+        style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", fontSize: 14, color: T.text, outline: "none", boxSizing: "border-box", colorScheme: "dark", marginBottom: 14 }} />
+
+      <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>¿Dónde fue? (opcional, para verlo en el mapa)</div>
+      {lugarSel ? <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(232,163,61,.1)", border: `1px solid ${T.accent}`, borderRadius: 10, padding: "10px 12px", marginBottom: 14 }}>
+        <span style={{ fontSize: 14 }}>📍</span><span style={{ flex: 1, fontSize: 12.5, color: T.text, fontWeight: 700 }}>{lugarSel.nombre.split(",").slice(0, 2).join(",")}</span>
+        <button onClick={() => setLugarSel(null)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}>✕</button>
+      </div> : <div style={{ marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 7 }}>
+          <input value={lugarTxt} onChange={e => setLugarTxt(e.target.value)} onKeyDown={e => e.key === "Enter" && buscarLugar()} placeholder="Bariloche, Río Negro"
+            style={{ flex: 1, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: T.text, outline: "none" }} />
+          <button onClick={buscarLugar} disabled={buscando} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.accent, borderRadius: 10, padding: "0 14px", cursor: "pointer" }}>{buscando ? "…" : "Buscar"}</button>
+        </div>
+        {resLugar.length > 0 && <div style={{ marginTop: 6, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, overflow: "hidden" }}>
+          {resLugar.map((r, i) => <div key={i} onClick={() => { setLugarSel(r); setResLugar([]); }} style={{ padding: "10px 12px", fontSize: 12.5, color: T.text, cursor: "pointer", borderTop: i ? `1px solid ${T.border}` : "none" }}>{r.nombre}</div>)}
+        </div>}
+      </div>}
+
+      <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>Las fotos y videos</div>
+      <button onClick={() => fileRef.current?.click()} style={{ width: "100%", background: T.card, border: `1.5px dashed ${T.border}`, color: T.text, borderRadius: 12, padding: "18px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", marginBottom: 10 }}><Ico n="cam" s={17} c={T.accent} /> {archivos.length ? `Agregar más (${archivos.length} elegidas)` : "Elegir fotos y videos del viaje"}</button>
+      <input ref={fileRef} type="file" accept="image/*,video/*" multiple onChange={elegirArchivos} style={{ display: "none" }} />
+      {archivos.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 16 }}>
+        {archivos.map((f, i) => (<div key={i} style={{ position: "relative", width: 72, height: 72, borderRadius: 9, overflow: "hidden", border: `1px solid ${T.border}`, background: T.card2 }}>
+          {f.type.startsWith("video") ? <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🎬</div> : <img src={URL.createObjectURL(f)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+          <button onClick={() => sacarArchivo(i)} style={{ position: "absolute", top: 3, right: 3, background: "rgba(0,0,0,.55)", border: "none", color: "#fff", borderRadius: "50%", width: 20, height: 20, fontSize: 11, cursor: "pointer" }}>✕</button>
+        </div>))}
+      </div>}
+
+      <button onClick={crear} disabled={subiendo} style={{ width: "100%", background: subiendo ? T.card2 : T.accent, border: "none", color: subiendo ? T.sub : "#1a1205", borderRadius: T.rsm, padding: "15px", fontSize: 14.5, fontWeight: 800, cursor: "pointer" }}>{subiendo ? `Guardando el viaje… ${prog}%` : "✓ Guardar como viaje vivido"}</button>
+    </div>
+  </div>);
+}
+
 /* ═══ APP: LISTA DE VIAJES ═══════════════════════════════════════ */
 export default function MisViajes() {
   const [data, setData] = useState(cargar);
@@ -1688,6 +1778,7 @@ export default function MisViajes() {
   useEffect(() => { try { document.title = cfg.titulo || "Mis Viajes"; } catch { } }, [cfg.titulo]);
   const [viajeId, setViajeId] = useState(null);
   const [ajustes, setAjustes] = useState(false);
+  const [vivido, setVivido] = useState(false);
   const guardar = (d) => { setData(d); guardarLS(d); };
   const guardarCfg = (c) => { setCfg(c); guardarCfgLS(c); };
   // El ícono muestra los días que faltan para el próximo viaje (hasta 60 días antes).
@@ -1730,7 +1821,11 @@ export default function MisViajes() {
       <UpdateBanner />
       <GlobitoPermiso />
       <ChatIdeas cfg={cfg} viajes={data.viajes || []} />
-      <button onClick={nuevoViaje} style={{ width: "100%", background: T.accent, border: "none", color: "#1a1205", borderRadius: T.r, padding: "16px", fontSize: 15, fontWeight: 800, cursor: "pointer", marginBottom: 18 }}><Ico n="mas" s={16} /> Planificar un viaje nuevo</button>
+      {vivido && <NuevoVivido cerrar={() => setVivido(false)} onCrear={(v2) => { guardar({ ...data, viajes: [v2, ...data.viajes] }); setVivido(false); setViajeId(v2.id); }} />}
+      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+        <button onClick={nuevoViaje} style={{ flex: 1, background: T.accent, border: "none", color: "#1a1205", borderRadius: T.r, padding: "16px 10px", fontSize: 14, fontWeight: 800, cursor: "pointer" }}><Ico n="mas" s={16} /> Viaje nuevo</button>
+        <button onClick={() => setVivido(true)} style={{ flex: 1, background: T.card, border: `1px solid ${T.accent}`, color: T.accent, borderRadius: T.r, padding: "16px 10px", fontSize: 14, fontWeight: 800, cursor: "pointer" }}><Ico n="reloj" s={16} /> Ya vivido</button>
+      </div>
       {(data.viajes || []).length === 0 && <div style={{ textAlign: "center", color: T.muted, fontSize: 13, padding: "30px 20px", lineHeight: 1.6 }}>Todavía no hay viajes.<br />Buenos Aires → Salta te está esperando.</div>}
       {(data.viajes || []).map(v => <CardViaje key={v.id} v={v} onAbrir={() => setViajeId(v.id)} onBorrar={() => borrarViaje(v)} />)}
     </div>
