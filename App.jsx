@@ -81,6 +81,66 @@ async function comprimirFoto(file) {
   });
 }
 
+/* ── EXIF GPS: la foto sabe de dónde es ──────────────────────────
+   Lee las coordenadas escondidas en el archivo (metadata EXIF), sin
+   subir nada a ningún lado — todo pasa en el teléfono. Si la foto no
+   tiene GPS (capturas de pantalla, fotos bajadas de internet, etc.)
+   devuelve null sin romper nada. Formato JPEG únicamente (el que usan
+   las cámaras); PNG/HEIC no llevan este tipo de EXIF accesible así. */
+async function leerGPSDeFoto(file) {
+  try {
+    if (!file || !file.type || !file.type.includes("jpeg") && !file.type.includes("jpg")) return null;
+    const buf = await file.slice(0, 128 * 1024).arrayBuffer();   // los primeros 128KB alcanzan siempre
+    const view = new DataView(buf);
+    if (view.getUint16(0) !== 0xFFD8) return null;                // no es JPEG
+    let offset = 2;
+    while (offset < view.byteLength - 4) {
+      if (view.getUint16(offset) !== 0xFFE1) {
+        const marker = view.getUint16(offset);
+        if ((marker & 0xFF00) !== 0xFF00) break;
+        offset += 2 + view.getUint16(offset + 2);
+        continue;
+      }
+      const exifOffset = offset + 4;
+      if (view.getUint32(exifOffset) !== 0x45786966) return null;   // "Exif"
+      const tiffStart = exifOffset + 6;
+      const little = view.getUint16(tiffStart) === 0x4949;
+      const g16 = (o) => view.getUint16(o, little), g32 = (o) => view.getUint32(o, little);
+      const ifd0 = tiffStart + g32(tiffStart + 4);
+      let gpsIfdOffset = null;
+      const n0 = g16(ifd0);
+      for (let i = 0; i < n0; i++) { const e = ifd0 + 2 + i * 12; if (g16(e) === 0x8825) { gpsIfdOffset = tiffStart + g32(e + 8); break; } }
+      if (!gpsIfdOffset) return null;
+      const rational = (o) => g32(o) / g32(o + 4);
+      const dms = (o) => rational(o) + rational(o + 8) / 60 + rational(o + 16) / 3600;
+      let lat = null, lon = null, latRef = "N", lonRef = "E";
+      const nG = g16(gpsIfdOffset);
+      for (let i = 0; i < nG; i++) {
+        const e = gpsIfdOffset + 2 + i * 12; const tag = g16(e); const valOff = tiffStart + g32(e + 8);
+        if (tag === 1) latRef = String.fromCharCode(view.getUint8(e + 8));
+        else if (tag === 2) lat = dms(valOff);
+        else if (tag === 3) lonRef = String.fromCharCode(view.getUint8(e + 8));
+        else if (tag === 4) lon = dms(valOff);
+      }
+      if (lat == null || lon == null) return null;
+      if (latRef === "S") lat = -lat; if (lonRef === "W") lon = -lon;
+      if (!isFinite(lat) || !isFinite(lon) || (lat === 0 && lon === 0)) return null;
+      return { lat, lon };
+    }
+    return null;
+  } catch { return null; }
+}
+async function lugarDesdeFoto(file) {
+  const gps = await leerGPSDeFoto(file);
+  if (!gps) return null;
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&accept-language=es&lat=${gps.lat}&lon=${gps.lon}`);
+    const j = await r.json(); const a = j.address || {};
+    const nombre = [a.tourism || a.village || a.town || a.city || a.municipality, a.state || a.country].filter(Boolean).join(", ") || j.display_name?.split(",").slice(0, 2).join(",");
+    return nombre ? { nombre, lat: gps.lat, lon: gps.lon } : null;
+  } catch { return { nombre: `${gps.lat.toFixed(4)}, ${gps.lon.toFixed(4)}`, lat: gps.lat, lon: gps.lon }; }
+}
+
 /* ── Geocodificación / Ruta / Leaflet / IA (igual que v1) ───────── */
 async function geocodificar(q) {
   const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&accept-language=es&q=${encodeURIComponent(q)}`);
@@ -162,7 +222,7 @@ async function dondeEstoy() {
 const extraerJSON = (t) => { const m = t.match(/\[[\s\S]*\]/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.8 · 26 jul 2026";
+const APP_VER = "v10.9 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -438,6 +498,7 @@ function Bitacora({ viaje, actualizar, media, recargarMedia }) {
     }
     setPendMedia(p => [...p, ...ids]);
     await recargarMedia();
+    if (!lugar) { for (const f of files) { const l = await lugarDesdeFoto(f); if (l) { setLugar({ ...l, detectado: true }); break; } } }
     setSubiendo(false);
   }
 
@@ -1700,7 +1761,16 @@ function NuevoVivido({ onCrear, cerrar }) {
     try { setResLugar(await geocodificar(lugarTxt)); } catch { setResLugar([]); }
     setBuscando(false);
   }
-  function elegirArchivos(e) { const files = Array.from(e.target.files || []); e.target.value = ""; setArchivos(prev => [...prev, ...files]); }
+  const [detectando, setDetectando] = useState(false);
+  async function elegirArchivos(e) {
+    const files = Array.from(e.target.files || []); e.target.value = "";
+    setArchivos(prev => [...prev, ...files]);
+    if (!lugarSel) {
+      setDetectando(true);
+      for (const f of files) { const l = await lugarDesdeFoto(f); if (l) { setLugarSel({ ...l, detectado: true }); break; } }
+      setDetectando(false);
+    }
+  }
   function sacarArchivo(i) { setArchivos(prev => prev.filter((_, j) => j !== i)); }
 
   async function crear() {
@@ -1741,8 +1811,13 @@ function NuevoVivido({ onCrear, cerrar }) {
         style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", fontSize: 14, color: T.text, outline: "none", boxSizing: "border-box", colorScheme: "dark", marginBottom: 14 }} />
 
       <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>¿Dónde fue? (opcional, para verlo en el mapa)</div>
+      {detectando && <div style={{ fontSize: 11.5, color: T.sub, marginBottom: 8 }}>📍 Buscando la ubicación en la foto…</div>}
       {lugarSel ? <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(232,163,61,.1)", border: `1px solid ${T.accent}`, borderRadius: 10, padding: "10px 12px", marginBottom: 14 }}>
-        <span style={{ fontSize: 14 }}>📍</span><span style={{ flex: 1, fontSize: 12.5, color: T.text, fontWeight: 700 }}>{lugarSel.nombre.split(",").slice(0, 2).join(",")}</span>
+        <span style={{ fontSize: 14 }}>📍</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12.5, color: T.text, fontWeight: 700 }}>{lugarSel.nombre.split(",").slice(0, 2).join(",")}</div>
+          {lugarSel.detectado && <div style={{ fontSize: 10, color: T.accent }}>Detectado en la foto ✓</div>}
+        </div>
         <button onClick={() => setLugarSel(null)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}>✕</button>
       </div> : <div style={{ marginBottom: 14 }}>
         <div style={{ display: "flex", gap: 7 }}>
