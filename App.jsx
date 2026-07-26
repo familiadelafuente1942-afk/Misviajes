@@ -251,7 +251,7 @@ async function dondeEstoy() {
 const extraerJSON = (t) => { const m = t.match(/\[[\s\S]*\]/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.16 · 26 jul 2026";
+const APP_VER = "v10.17 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -503,7 +503,7 @@ function Bitacora({ viaje, actualizar, media, recargarMedia }) {
   const [lugar, setLugar] = useState(null);         // {nombre, lat, lon} — el ancla en el mapa
   const [buscandoGPS, setBuscandoGPS] = useState(false);
   const [buscarLugar, setBuscarLugar] = useState(false);
-  const [vista, setVista] = useState("mapa");       // el mapa es la cara del recuerdo
+  const [vista, setVista] = useState(viaje.vivido ? "lista" : "mapa");   // vivido: lista primero, se ven todas las fotos tengan o no lugar marcado
   const [lugarSel, setLugarSel] = useState(null);   // lugar tocado en el mapa
   const entradas = [...(viaje.bitacora || [])].sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""));
 
@@ -1450,7 +1450,7 @@ function ClimaTab({ viaje, onResumen }) {
 /* ═══ PANTALLA DE UN VIAJE (pestañas: Ruta / Bitácora / Clip) ════ */
 function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
   const perfil = perfilTexto(cfg);
-  const [tab, setTab] = useState("ruta");
+  const [tab, setTab] = useState(viaje.vivido ? "bitacora" : "ruta");
   const [ruta, setRuta] = useState(null);
   const [calc, setCalc] = useState(false);
   const [err, setErr] = useState("");
@@ -1544,7 +1544,9 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
     window.open(`https://www.google.com/maps/dir/?api=1&origin=${o.lat},${o.lon}&destination=${d.lat},${d.lon}${wp ? `&waypoints=${encodeURIComponent(wp)}` : ""}&travelmode=driving`, "_blank");
   }
 
-  const TABS = [["ruta", "Ruta", "mapa"], ["reservas", "Reservas", "ticket"], ["clima", "Clima", "sol"], ["lugar", "Del lugar", "nota"], ["gastos", "Gastos", "plata"], ["valija", "Valija", "valija"], ["bitacora", "Bitácora", "libro"], ["clip", "Clip", "peli"]];
+  const TABS = viaje.vivido
+    ? [["bitacora", "Bitácora", "libro"], ["ruta", "Mapa del viaje", "mapa"], ["lugar", "Del lugar", "nota"], ["clip", "Clip", "peli"]]
+    : [["ruta", "Ruta", "mapa"], ["reservas", "Reservas", "ticket"], ["clima", "Clima", "sol"], ["lugar", "Del lugar", "nota"], ["gastos", "Gastos", "plata"], ["valija", "Valija", "valija"], ["bitacora", "Bitácora", "libro"], ["clip", "Clip", "peli"]];
 
   return (<div style={{ minHeight: "100vh", paddingBottom: 90 }}>
     <div style={{ padding: "14px 16px 0", paddingTop: "max(14px, env(safe-area-inset-top))" }}>
