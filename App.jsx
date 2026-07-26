@@ -162,7 +162,7 @@ async function dondeEstoy() {
 const extraerJSON = (t) => { const m = t.match(/\[[\s\S]*\]/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.2 · 26 jul 2026";
+const APP_VER = "v10.5 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1057,6 +1057,13 @@ function PlannerIA({ viaje, actualizar, perfil }) {
 /* ═══ AJUSTES: hacé la app TUYA ══════════════════════════════════ */
 function Ajustes({ cfg, guardarCfg, cerrar }) {
   const fondoRef = useRef(null);
+  const [notas, setNotas] = useState(cfg.notas || "");
+  const [guardado, setGuardado] = useState(false);
+  function guardarTodo() {
+    guardarCfg({ ...cfg, notas: notas.trim() });
+    setGuardado(true);
+    setTimeout(() => cerrar(), 900);   // confirmación visible y vuelve solo
+  }
   async function subirFondo(e) {
     const f = e.target.files?.[0]; e.target.value = ""; if (!f) return;
     // comprimida y como dataURL: el fondo carga al instante, siempre
@@ -1123,8 +1130,11 @@ function Ajustes({ cfg, guardarCfg, cerrar }) {
         {["En pareja", "En familia", "Con amigos", "Con mascota", "Solo/a"].map(c2 => <button key={c2} onClick={() => guardarCfg({ ...cfg, compania: cfg.compania === c2 ? "" : c2 })} style={chip(cfg.compania === c2)}>{c2}</button>)}
       </div>
       <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 7 }}>Algo más que la IA deba saber</div>
-      <textarea defaultValue={cfg.notas || ""} onBlur={e => guardarCfg({ ...cfg, notas: e.target.value })} rows={3} placeholder="Ej: paramos siempre en cabañas, evitamos peajes, viajamos con el perro…"
+      <textarea value={notas} onChange={e => setNotas(e.target.value)} rows={3} placeholder="Ej: paramos siempre en cabañas, evitamos peajes, viajamos con el perro…"
         style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: T.text, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
+
+      <button onClick={guardarTodo} style={{ width: "100%", marginTop: 16, background: guardado ? T.ok : T.accent, border: "none", color: guardado ? "#fff" : "#1a1205", borderRadius: T.rsm, padding: "15px", fontSize: 14.5, fontWeight: 800, cursor: "pointer", transition: "background .25s" }}>{guardado ? "✓ Guardado — la IA ya viaja como ustedes" : "✓ Guardar mi estilo"}</button>
+      <div style={{ fontSize: 11, color: T.muted, textAlign: "center", marginTop: 8, lineHeight: 1.5 }}>Los botones de arriba se guardan solos al tocarlos; este botón asegura también el texto libre y confirma todo junto.</div>
       <div style={{ textAlign: "center", fontSize: 11, color: T.muted, marginTop: 26 }}>{APP_VER} — la app se chequea sola al abrir y se actualiza apenas hay versión nueva.</div>
     </div>
   </div>);
@@ -1444,6 +1454,75 @@ function CardViaje({ v, onAbrir, onBorrar }) {
   </div>);
 }
 
+/* ═══ COPILOTO DE IDEAS: ¿a dónde vamos la próxima? ══════════════
+   El chat de la portada: sin destino, sin viaje creado. "Tengo 4 días,
+   ¿a dónde me recomendás?" — y contesta conociendo su estilo y los
+   viajes que ya hicieron. La charla donde nace el próximo viaje. */
+function ChatIdeas({ cfg, viajes }) {
+  const [abierto, setAbierto] = useState(false);
+  const [msgs, setMsgs] = useState([]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const endRef = useRef(null);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, busy]);
+
+  const SUGERIDAS = ["Tengo 4 días, ¿a dónde me recomendás?", "Escapada en auto, ¿qué hay lindo cerca?", "¿A dónde conviene ir en esta época?", "Sorprendeme con un destino"];
+
+  async function enviar(texto) {
+    const t = (texto ?? input).trim(); if (!t || busy) return;
+    setInput("");
+    const nuevos = [...msgs, { role: "user", content: t }];
+    setMsgs(nuevos); setBusy(true);
+    try {
+      const perfil = perfilTexto(cfg);
+      const hechos = (viajes || []).map(v2 => { const o = v2.puntos?.[0]?.nombre?.split(",")[0]; const d = v2.puntos?.length > 1 ? v2.puntos[v2.puntos.length - 1].nombre.split(",")[0] : null; return d ? `${v2.nombre} (${o} → ${d})` : v2.nombre; }).join("; ");
+      const hoy = new Date().toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" });
+      const sys = `Sos el copiloto de ideas de la app Mis Viajes: un amigo viajado que ayuda a elegir el PRÓXIMO destino. Hoy es ${hoy} (tené en cuenta la estación y la época del año). Contestás en voseo, cálido y concreto.${perfil ? ` Así viaja esta gente (planificá SIEMPRE para ellos): ${perfil}.` : ""}${hechos ? ` Viajes que ya tienen en la app (evitá repetirlos salvo que pidan volver): ${hechos}.` : ""} Cuando recomiendes destinos: da 2 o 3 opciones concretas con el porqué pensado para ellos (qué comer, qué ver, cuántos km o cómo llegar). Si falta un dato clave (días, época, desde dónde), preguntalo corto. Cerrá sugiriendo que cuando elijan, creen el viaje en la app y la IA les arma el itinerario completo.`;
+      const resp = await llamarIA(nuevos.slice(-12), sys, 1600);
+      setMsgs(prev => [...prev, { role: "assistant", content: resp }]);
+    } catch { setMsgs(prev => [...prev, { role: "assistant", content: "Uy, no pude responder (¿hay internet?). Probá de nuevo." }]); }
+    setBusy(false);
+  }
+
+  return (<>
+    {/* la tarjeta-invitación en la portada */}
+    <div onClick={() => setAbierto(true)} style={{ background: "linear-gradient(135deg, rgba(232,163,61,.14), rgba(77,163,255,.08))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: "14px 16px", marginBottom: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ fontSize: 26 }}>🧭</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 800, color: T.text }}>¿A dónde vamos la próxima?</div>
+        <div style={{ fontSize: 11.5, color: T.sub, marginTop: 2, lineHeight: 1.45 }}>Preguntale al copiloto sin cargar nada: "tengo 4 días, ¿qué me recomendás?"</div>
+      </div>
+      <Ico n="chat" s={20} c={T.accent} />
+    </div>
+
+    {abierto && <div style={{ position: "fixed", inset: 0, zIndex: 150, background: T.bg, display: "flex", flexDirection: "column" }}>
+      <div style={{ padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top))", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${T.border}` }}>
+        <button onClick={() => setAbierto(false)} style={{ background: "none", border: "none", color: T.text, cursor: "pointer", padding: 4 }}><Ico n="volver" s={22} /></button>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: T.text }}>🧭 ¿A dónde vamos?</div>
+          <div style={{ fontSize: 10.5, color: T.sub }}>El copiloto ya sabe cómo viajan y qué viajes hicieron</div>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+        {msgs.length === 0 && <div>
+          <div style={{ color: T.sub, fontSize: 13, lineHeight: 1.6, marginBottom: 14 }}>Todavía no hace falta saber el destino — para eso estoy. Tocá una pregunta o escribí la tuya:</div>
+          {SUGERIDAS.map((q, i) => <button key={i} onClick={() => enviar(q)} style={{ display: "block", width: "100%", textAlign: "left", background: T.card, border: `1px solid ${T.border}`, color: T.text, borderRadius: 12, padding: "13px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 8 }}>{q}</button>)}
+        </div>}
+        {msgs.map((m, i) => (<div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
+          <div style={{ maxWidth: "85%", background: m.role === "user" ? T.accent : T.card, color: m.role === "user" ? "#1a1205" : T.text, borderRadius: 14, padding: "11px 14px", fontSize: 13.5, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{m.content}</div>
+        </div>))}
+        {busy && <div style={{ color: T.sub, fontSize: 12.5 }}>Pensando destinos…</div>}
+        <div ref={endRef} />
+      </div>
+      <div style={{ padding: "10px 14px", paddingBottom: "max(12px, env(safe-area-inset-bottom))", borderTop: `1px solid ${T.border}`, display: "flex", gap: 8 }}>
+        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && enviar()} placeholder="Che, ¿a dónde me recomendás ir…?"
+          style={{ flex: 1, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 14px", fontSize: 14, color: T.text, outline: "none" }} />
+        <button onClick={() => enviar()} disabled={busy} style={{ background: T.accent, border: "none", color: "#1a1205", borderRadius: 12, padding: "0 16px", fontWeight: 800, cursor: "pointer" }}><Ico n="flecha" s={17} /></button>
+      </div>
+    </div>}
+  </>);
+}
+
 /* ═══ APP: LISTA DE VIAJES ═══════════════════════════════════════ */
 export default function MisViajes() {
   const [data, setData] = useState(cargar);
@@ -1493,6 +1572,7 @@ export default function MisViajes() {
     <div style={{ padding: "0 20px 40px" }}>
       <UpdateBanner />
       <GlobitoPermiso />
+      <ChatIdeas cfg={cfg} viajes={data.viajes || []} />
       <button onClick={nuevoViaje} style={{ width: "100%", background: T.accent, border: "none", color: "#1a1205", borderRadius: T.r, padding: "16px", fontSize: 15, fontWeight: 800, cursor: "pointer", marginBottom: 18 }}><Ico n="mas" s={16} /> Planificar un viaje nuevo</button>
       {(data.viajes || []).length === 0 && <div style={{ textAlign: "center", color: T.muted, fontSize: 13, padding: "30px 20px", lineHeight: 1.6 }}>Todavía no hay viajes.<br />Buenos Aires → Salta te está esperando.</div>}
       {(data.viajes || []).map(v => <CardViaje key={v.id} v={v} onAbrir={() => setViajeId(v.id)} onBorrar={() => borrarViaje(v)} />)}
