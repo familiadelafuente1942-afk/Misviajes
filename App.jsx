@@ -251,7 +251,7 @@ async function dondeEstoy() {
 const extraerJSON = (t) => { const m = t.match(/\[[\s\S]*\]/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.14 · 26 jul 2026";
+const APP_VER = "v10.15 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1466,6 +1466,8 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
   const [media, setMedia] = useState([]);
   const chatEndRef = useRef(null);
   const [climaResumen, setClimaResumen] = useState("");
+  const [puntoAbierto, setPuntoAbierto] = useState(null);   // qué parada tiene el detalle desplegado
+  const [plannerAbierto, setPlannerAbierto] = useState(false);   // pedirle a la IA el viaje completo, aunque ya haya puntos
 
   const puntos = viaje.puntos || [];
   const sugerencias = viaje.sugerencias || [];
@@ -1563,23 +1565,30 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
       <UpdateBanner />
       <BarraViaje viaje={viaje} actualizar={actualizar} />
 
-      {tab === "ruta" && puntos.length === 0 && <PlannerIA viaje={viaje} actualizar={actualizar} perfil={perfil} />}
+      {tab === "ruta" && (puntos.length === 0 || plannerAbierto) && <PlannerIA viaje={viaje} actualizar={(v2) => { actualizar(v2); setPlannerAbierto(false); }} perfil={perfil} />}
       {tab === "ruta" && <>
         <div>
-          <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 9 }}>{puntos.length === 0 ? "¿De dónde a dónde?" : `Recorrido (${puntos.length} puntos)`}</div>
-          {puntos.map((p, i) => (<div key={i} style={{ display: "flex", alignItems: "center", gap: 9, background: T.card, border: `1px solid ${T.border}`, borderRadius: T.rsm, padding: "11px 12px", marginBottom: 7 }}>
-            <div style={{ width: 26, height: 26, borderRadius: "50%", background: i === 0 ? T.ok : i === puntos.length - 1 ? T.danger : T.accent2, color: "#fff", fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i === 0 ? "A" : i === puntos.length - 1 ? "B" : i}</div>
-            <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: T.text, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.nombre.split(",").slice(0, 2).join(",")}</div>
-            {i > 0 && i < puntos.length - 1 && <>
-              <button onClick={() => mover(i, -1)} style={{ background: "none", border: "none", color: T.sub, cursor: "pointer", padding: 3 }}><Ico n="subir" s={15} /></button>
-              <button onClick={() => mover(i, 1)} style={{ background: "none", border: "none", color: T.sub, cursor: "pointer", padding: 3 }}><Ico n="bajar" s={15} /></button>
-            </>}
-            {puntos.length > 2 || i > 0 ? <button onClick={() => sacar(i)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer", padding: 3 }}><Ico n="tacho" s={15} /></button> : null}
-          </div>))}
-          {puntos.length >= 2 && !(viaje.itinerario || []).length && <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.rsm, padding: "11px 12px", marginTop: 4 }}>
-            <div style={{ fontSize: 11.5, fontWeight: 800, color: T.text, marginBottom: 2 }}>🛏 Dormir en {puntos[puntos.length - 1].nombre.split(",")[0]}</div>
-            <HospedajeLinks lugar={puntos[puntos.length - 1].nombre.split(",").slice(0, 2).join(",")} f={null} />
-          </div>}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
+            <div style={{ flex: 1, fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em" }}>{puntos.length === 0 ? "¿De dónde a dónde?" : `Recorrido (${puntos.length} puntos)`}</div>
+            {puntos.length > 0 && !plannerAbierto && <button onClick={() => setPlannerAbierto(true)} style={{ background: "rgba(232,163,61,.12)", border: `1px solid ${T.accent}`, color: T.accent, borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 800, cursor: "pointer", flexShrink: 0 }}><Ico n="varita" s={12} /> Rehacer con IA</button>}
+          </div>
+          <div style={{ fontSize: 11.5, color: T.sub, lineHeight: 1.5, marginBottom: 10 }}>Tocá cualquier parada para ver hospedaje y turismo de ESE lugar — no solo del destino final.</div>
+          {puntos.map((p, i) => { const abierto = puntoAbierto === i; return (<div key={i} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.rsm, marginBottom: 7, overflow: "hidden" }}>
+            <div onClick={() => setPuntoAbierto(abierto ? null : i)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "11px 12px", cursor: "pointer" }}>
+              <div style={{ width: 26, height: 26, borderRadius: "50%", background: i === 0 ? T.ok : i === puntos.length - 1 ? T.danger : T.accent2, color: "#fff", fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i === 0 ? "A" : i === puntos.length - 1 ? "B" : i}</div>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: T.text, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.nombre.split(",").slice(0, 2).join(",")}</div>
+              <span style={{ fontSize: 10, color: T.muted }}>{abierto ? "▲" : "▼"}</span>
+              {i > 0 && i < puntos.length - 1 && <>
+                <button onClick={(e) => { e.stopPropagation(); mover(i, -1); }} style={{ background: "none", border: "none", color: T.sub, cursor: "pointer", padding: 3 }}><Ico n="subir" s={15} /></button>
+                <button onClick={(e) => { e.stopPropagation(); mover(i, 1); }} style={{ background: "none", border: "none", color: T.sub, cursor: "pointer", padding: 3 }}><Ico n="bajar" s={15} /></button>
+              </>}
+              {puntos.length > 2 || i > 0 ? <button onClick={(e) => { e.stopPropagation(); sacar(i); }} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer", padding: 3 }}><Ico n="tacho" s={15} /></button> : null}
+            </div>
+            {abierto && <div style={{ padding: "0 12px 12px" }}>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: T.text, marginBottom: 6 }}>🛏 Dormir en {p.nombre.split(",")[0]}</div>
+              <HospedajeLinks lugar={p.nombre.split(",").slice(0, 2).join(",")} f={(fechasParada(viaje))[p.nombre] || null} />
+            </div>}
+          </div>); })}
           <div style={{ marginTop: 10 }}>
             <BuscarLugar placeholder={puntos.length === 0 ? "¿De dónde salís? (ej: Buenos Aires)" : puntos.length === 1 ? "¿A dónde vas? (ej: Salta)" : "Agregar otra parada…"}
               onElegir={(r) => setPuntos(puntos.length < 2 ? [...puntos, r] : [...puntos.slice(0, -1), r, puntos[puntos.length - 1]])} />
