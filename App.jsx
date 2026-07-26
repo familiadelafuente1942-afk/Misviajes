@@ -56,9 +56,11 @@ const _memMedia = new Map();   // respaldo en RAM cuando no hay IndexedDB (vista
 const hayIDB = () => { try { return typeof indexedDB !== "undefined" && !!indexedDB; } catch { return false; } };
 function abrirIDB() {
   return new Promise((res, rej) => {
+    const t = setTimeout(() => rej(new Error("El almacenamiento del teléfono no respondió a tiempo")), 8000);
     const r = indexedDB.open("misviajes", 1);
     r.onupgradeneeded = () => { const st = r.result.createObjectStore("media", { keyPath: "id" }); st.createIndex("viaje", "viajeId"); };
-    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    r.onsuccess = () => { clearTimeout(t); res(r.result); };
+    r.onerror = () => { clearTimeout(t); rej(r.error); };
   });
 }
 async function mediaGuardar(item) { if (!hayIDB()) { _memMedia.set(item.id, item); return true; } const db = await abrirIDB(); return new Promise((res, rej) => { const tx = db.transaction("media", "readwrite"); tx.objectStore("media").put(item); tx.oncomplete = () => res(true); tx.onerror = () => rej(tx.error); }); }
@@ -68,15 +70,24 @@ async function mediaBorrar(id) { if (!hayIDB()) { _memMedia.delete(id); return t
 /* Fotos comprimidas antes de guardar: 1600px máx, JPEG. Los videos van tal cual. */
 async function comprimirFoto(file) {
   return new Promise((res) => {
+    let terminado = false;
+    const acabar = (v2) => { if (terminado) return; terminado = true; res(v2); };
+    // Si la foto vive en iCloud y no está bajada al dispositivo, decodificarla
+    // puede demorar mientras Safari la trae. A los 20s seguimos con el archivo
+    // original (sin comprimir) en vez de dejar la carga entera colgada.
+    const limite = setTimeout(() => { try { URL.revokeObjectURL(url); } catch { } acabar(file); }, 20000);
     const url = URL.createObjectURL(file); const img = new Image();
     img.onload = () => {
-      const esc = Math.min(1, 1600 / Math.max(img.width, img.height));
-      const cv = document.createElement("canvas");
-      cv.width = Math.round(img.width * esc); cv.height = Math.round(img.height * esc);
-      cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
-      cv.toBlob(b => { URL.revokeObjectURL(url); res(b || file); }, "image/jpeg", 0.82);
+      clearTimeout(limite);
+      try {
+        const esc = Math.min(1, 1600 / Math.max(img.width, img.height));
+        const cv = document.createElement("canvas");
+        cv.width = Math.round(img.width * esc); cv.height = Math.round(img.height * esc);
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+        cv.toBlob(b => { URL.revokeObjectURL(url); acabar(b || file); }, "image/jpeg", 0.82);
+      } catch { URL.revokeObjectURL(url); acabar(file); }
     };
-    img.onerror = () => { URL.revokeObjectURL(url); res(file); };
+    img.onerror = () => { clearTimeout(limite); URL.revokeObjectURL(url); acabar(file); };
     img.src = url;
   });
 }
@@ -222,7 +233,7 @@ async function dondeEstoy() {
 const extraerJSON = (t) => { const m = t.match(/\[[\s\S]*\]/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.11 · 26 jul 2026";
+const APP_VER = "v10.13 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1531,20 +1542,8 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
 
       {tab === "ruta" && puntos.length === 0 && <PlannerIA viaje={viaje} actualizar={actualizar} perfil={perfil} />}
       {tab === "ruta" && <>
-        <Mapa puntos={puntos} linea={ruta?.linea} sugerencias={sugerencias} onAgregarSug={agregarSugerencia} />
-        {calc && <div style={{ fontSize: 12, color: T.sub, marginTop: 8, textAlign: "center" }}>Calculando la ruta…</div>}
-        {err && <div style={{ fontSize: 12, color: T.danger, marginTop: 8, textAlign: "center" }}>{err}</div>}
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <button onClick={sugerirConIA} disabled={sugiriendo} style={{ flex: 1, background: sugiriendo ? T.card2 : T.accent, border: "none", color: sugiriendo ? T.sub : "#1a1205", borderRadius: T.rsm, padding: "13px 8px", fontSize: 13, fontWeight: 800, cursor: "pointer" }}><Ico n="estrella" s={15} /> {sugiriendo ? "Buscando joyitas…" : "¿Qué hay lindo para ver?"}</button>
-          <button onClick={abrirGoogleMaps} disabled={puntos.length < 2} style={{ flex: 1, background: T.card, border: `1px solid ${T.border}`, color: T.text, borderRadius: T.rsm, padding: "13px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}><Ico n="gmaps" s={15} c={T.accent2} /> Navegar con Maps</button>
-        </div>
-        {puntos.length >= 2 && <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", background: T.card, border: `1px solid ${T.border}`, borderRadius: T.rsm, padding: "11px 12px" }}>
-          <span style={{ fontSize: 17 }}>🚘</span>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: T.sub, lineHeight: 1.45 }}><b style={{ color: T.text }}>Verlo en el auto:</b> mandá el viaje al navegador y enchufá el teléfono — aparece en CarPlay / Android Auto con todas las paradas.</div>
-          <button onClick={abrirAppleMaps} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "9px 11px", fontSize: 11.5, fontWeight: 800, cursor: "pointer", flexShrink: 0 }}> Apple Maps</button>
-        </div>}
-        <div style={{ marginTop: 18 }}>
-          <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 9 }}>Recorrido ({puntos.length} puntos)</div>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 9 }}>{puntos.length === 0 ? "¿De dónde a dónde?" : `Recorrido (${puntos.length} puntos)`}</div>
           {puntos.map((p, i) => (<div key={i} style={{ display: "flex", alignItems: "center", gap: 9, background: T.card, border: `1px solid ${T.border}`, borderRadius: T.rsm, padding: "11px 12px", marginBottom: 7 }}>
             <div style={{ width: 26, height: 26, borderRadius: "50%", background: i === 0 ? T.ok : i === puntos.length - 1 ? T.danger : T.accent2, color: "#fff", fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i === 0 ? "A" : i === puntos.length - 1 ? "B" : i}</div>
             <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: T.text, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.nombre.split(",").slice(0, 2).join(",")}</div>
@@ -1563,6 +1562,20 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
               onElegir={(r) => setPuntos(puntos.length < 2 ? [...puntos, r] : [...puntos.slice(0, -1), r, puntos[puntos.length - 1]])} />
           </div>
         </div>
+        <div style={{ marginTop: 14 }}>
+          <Mapa puntos={puntos} linea={ruta?.linea} sugerencias={sugerencias} onAgregarSug={agregarSugerencia} />
+        </div>
+        {calc && <div style={{ fontSize: 12, color: T.sub, marginTop: 8, textAlign: "center" }}>Calculando la ruta…</div>}
+        {err && <div style={{ fontSize: 12, color: T.danger, marginTop: 8, textAlign: "center" }}>{err}</div>}
+        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <button onClick={sugerirConIA} disabled={sugiriendo} style={{ flex: 1, background: sugiriendo ? T.card2 : T.accent, border: "none", color: sugiriendo ? T.sub : "#1a1205", borderRadius: T.rsm, padding: "13px 8px", fontSize: 13, fontWeight: 800, cursor: "pointer" }}><Ico n="estrella" s={15} /> {sugiriendo ? "Buscando joyitas…" : "¿Qué hay lindo para ver?"}</button>
+          <button onClick={abrirGoogleMaps} disabled={puntos.length < 2} style={{ flex: 1, background: T.card, border: `1px solid ${T.border}`, color: T.text, borderRadius: T.rsm, padding: "13px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}><Ico n="gmaps" s={15} c={T.accent2} /> Navegar con Maps</button>
+        </div>
+        {puntos.length >= 2 && <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", background: T.card, border: `1px solid ${T.border}`, borderRadius: T.rsm, padding: "11px 12px" }}>
+          <span style={{ fontSize: 17 }}>🚘</span>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: T.sub, lineHeight: 1.45 }}><b style={{ color: T.text }}>Verlo en el auto:</b> mandá el viaje al navegador y enchufá el teléfono — aparece en CarPlay / Android Auto con todas las paradas.</div>
+          <button onClick={abrirAppleMaps} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "9px 11px", fontSize: 11.5, fontWeight: 800, cursor: "pointer", flexShrink: 0 }}> Apple Maps</button>
+        </div>}
         {(viaje.itinerario || []).length > 0 && <div style={{ marginTop: 18 }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 9 }}>El plan, pensado para ustedes</div>
           {(() => { const fp = fechasParada(viaje); return viaje.itinerario.map((it, i) => { const f = fp[it.nombre]; return (<div key={i} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.rsm, padding: "11px 12px", marginBottom: 7 }}>
