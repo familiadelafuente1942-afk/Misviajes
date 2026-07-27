@@ -304,7 +304,7 @@ async function leerVoucherIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.40 · 26 jul 2026";
+const APP_VER = "v10.41 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -789,6 +789,8 @@ function ClipMaker({ viaje, media }) {
   const [prog, setProg] = useState(0);
   const [clipUrl, setClipUrl] = useState(null);
   const [clipBlob, setClipBlob] = useState(null);
+  const [audioFile, setAudioFile] = useState(null);   // canción propia para de fondo (no es de Spotify: eso no se puede bajar, por licencias)
+  const audioRef = useRef(null);
   const soporta = typeof MediaRecorder !== "undefined" && !!document.createElement("canvas").captureStream;
 
   const toggle = (id) => setSel(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
@@ -802,8 +804,26 @@ function ClipMaker({ viaje, media }) {
       const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
       const ctx = cv.getContext("2d");
       const stream = cv.captureStream(FPS);
+
+      // Música de fondo: se mezcla de verdad adentro del video, con Web
+      // Audio API — un archivo que vos elegiste, no algo bajado de Spotify.
+      let audioCtx = null, audioEl = null;
+      if (audioFile) {
+        try {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          audioEl = new Audio(URL.createObjectURL(audioFile));
+          audioEl.loop = true; audioEl.crossOrigin = "anonymous";
+          const fuente = audioCtx.createMediaElementSource(audioEl);
+          const destino = audioCtx.createMediaStreamDestination();
+          const volumen = audioCtx.createGain(); volumen.gain.value = 0.85;
+          fuente.connect(volumen); volumen.connect(destino);
+          destino.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+          await audioEl.play();
+        } catch { audioCtx = null; audioEl = null; }   // si algo falla, el clip se genera igual, mudo
+      }
+
       const mime = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"].find(m => MediaRecorder.isTypeSupported(m)) || "";
-      const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 6_000_000 } : undefined);
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 6_000_000, audioBitsPerSecond: 128_000 } : undefined);
       const chunks = [];
       rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
       const terminado = new Promise(res => { rec.onstop = res; });
@@ -862,6 +882,8 @@ function ClipMaker({ viaje, media }) {
       for (let f = 0; f < FPS * 2; f++) { textoCentrado(["Fin del viaje ✦"], new Date().getFullYear().toString()); await frame(); }
 
       rec.stop(); await terminado;
+      if (audioEl) { try { audioEl.pause(); } catch { } }
+      if (audioCtx) { try { audioCtx.close(); } catch { } }
       const blob = new Blob(chunks, { type: mime || "video/webm" });
       setClipBlob(blob); setClipUrl(URL.createObjectURL(blob)); setProg(100);
     } catch (e) { alert("No pude generar el clip: " + e.message); }
@@ -890,6 +912,17 @@ function ClipMaker({ viaje, media }) {
       <span style={{ fontSize: 12, color: T.sub }}>Segundos por video:</span>
       {[3, 4, 6, 8].map(s2 => <button key={s2} onClick={() => setSegVideo(s2)} style={{ background: segVideo === s2 ? T.accent : T.card, border: `1px solid ${segVideo === s2 ? T.accent : T.border}`, color: segVideo === s2 ? "#1a1205" : T.sub, borderRadius: 8, padding: "6px 11px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>{s2}s</button>)}
     </div>
+    <div style={{ fontSize: 12, color: T.sub, marginBottom: 7 }}>🎵 Música de fondo (opcional)</div>
+    {audioFile ? <div style={{ display: "flex", alignItems: "center", gap: 8, background: T.card, border: `1px solid ${T.accent}`, borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
+      <Ico n="nota" s={14} c={T.accent} />
+      <span style={{ flex: 1, fontSize: 12.5, color: T.text, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{audioFile.name}</span>
+      <button onClick={() => setAudioFile(null)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="cerrar" s={11} /></button>
+    </div> : <>
+      <button onClick={() => audioRef.current?.click()} style={{ width: "100%", background: T.card, border: `1.5px dashed ${T.border}`, color: T.text, borderRadius: 10, padding: "11px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", marginBottom: 5 }}><Ico n="nota" s={13} c={T.accent} /> Elegir una canción del teléfono</button>
+      <div style={{ fontSize: 10.5, color: T.muted, lineHeight: 1.4, marginBottom: 12 }}>Tiene que ser un archivo de audio que ya tengas (no se puede bajar de Spotify por licencias). Si querés música de Spotify de verdad, subí el clip mudo y agregala desde el buscador de música de Instagram o TikTok al compartirlo.</div>
+    </>}
+    <input ref={audioRef} type="file" accept="audio/*" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) setAudioFile(f); }} style={{ display: "none" }} />
+
     <button onClick={generar} disabled={generando || !sel.length} style={{ width: "100%", background: generando ? T.card2 : T.accent, border: "none", color: generando ? T.sub : "#1a1205", borderRadius: T.rsm, padding: "14px", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
       <Ico n="peli" s={16} /> {generando ? `Generando… ${prog}%` : `Armar el clip (${sel.length} elegido${sel.length === 1 ? "" : "s"})`}
     </button>
