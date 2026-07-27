@@ -269,7 +269,7 @@ async function dondeEstoy() {
 const extraerJSON = (t) => { const m = t.match(/\[[\s\S]*\]/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.23 · 26 jul 2026";
+const APP_VER = "v10.24 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -370,6 +370,26 @@ function Ico({ n, s = 16, c = "currentColor" }) {
     ticket: "M4 9a2 2 0 002-2h12a2 2 0 002 2v2a2 2 0 000 4v2a2 2 0 00-2 2H6a2 2 0 00-2-2v-2a2 2 0 000-4V9zM13 6v2M13 11v2M13 16v2",
     nota: "M9 18a3 3 0 11-6 0 3 3 0 016 0zM21 16a3 3 0 11-6 0 3 3 0 016 0zM9 18V5l12-2v13",
     reloj: "M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 3",
+    brujula: "M12 21a9 9 0 100-18 9 9 0 000 18zM15 9l-2 6-4-2 2-6z",
+    avion: "M2.5 19l19-7-19-7 4 7-4 7zM7.5 12h11",
+    pin: "M12 21s-7-6.1-7-11a7 7 0 1114 0c0 4.9-7 11-7 11zM12 12a2 2 0 100-4 2 2 0 000 4z",
+    comida: "M6 3v7a2 2 0 002 2 2 2 0 002-2V3M8 12v9M17 3c-2 0-3 2-3 5s1 4 3 4M17 3v16",
+    cama: "M3 18v-6a2 2 0 012-2h14a2 2 0 012 2v6M3 18v2M21 18v2M3 12V7a1 1 0 011-1h4a1 1 0 011 1v3M11 12V8a1 1 0 011-1h6a2 2 0 012 2v3",
+    bus: "M4 16V6a2 2 0 012-2h12a2 2 0 012 2v10M4 16h16M4 16v3h2v-2M18 16v3h2v-2M7 12h10M7 8h10M7.5 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM16.5 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3z",
+    alerta: "M12 9v4M12 17h.01M10.3 3.9L2.7 17a2 2 0 001.7 3h15.2a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z",
+    gas: "M6 3h8v18H6zM14 8h2l2 2v7a1.5 1.5 0 01-3 0v-3h-1M6 9h8",
+    cajero: "M3 6h18v13H3zM3 10h18M7 15h4",
+    pastilla: "M8.5 15.5l7-7a3.5 3.5 0 10-5-5l-7 7a3.5 3.5 0 105 5zM8 8l8 8",
+    llave: "M14.7 6.3a4 4 0 10-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 002.4-1.1 4 4 0 000-5.7v0z",
+    carrito: "M3 4h2l2.4 12.2a2 2 0 002 1.8h8.4a2 2 0 002-1.7L21 8H6M9 21a1 1 0 100-2 1 1 0 000 2zM18 21a1 1 0 100-2 1 1 0 000 2z",
+    cruz: "M12 3l8 3v6c0 5-3.4 8.4-8 9-4.6-.6-8-4-8-9V6l8-3zM9 12h6M12 9v6",
+    check: "M5 12l4.5 4.5L19 7",
+    cerrar: "M6 6l12 12M18 6L6 18",
+    globo: "M12 21a9 9 0 100-18 9 9 0 000 18zM3 12h18M12 3a13 13 0 010 18M12 3a13 13 0 000 18",
+    micuchara: "M6 3v7a2 2 0 002 2 2 2 0 002-2V3M8 12v9M17 3c-2 0-3 2-3 5s1 4 3 4M17 3v16",
+    regla: "M3 17L17 3l4 4L7 21zM13 7l2 2M9 11l2 2",
+    museo: "M3 21h18M4 21V10L12 4l8 6v11M9 21v-6h6v6",
+    tarjeta: "M3 6h18v12H3zM3 10h18M7 15h4",
   };
   return (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, verticalAlign: "-2px" }}><path d={P[n] || ""} /></svg>);
 }
@@ -436,7 +456,7 @@ function Mapa({ puntos, linea, sugerencias, onAgregarSug, alto = 320 }) {
     {/* medidor estilo Google Maps */}
     <div style={{ position: "absolute", top: 9, right: 9, zIndex: 500, display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
       <button onClick={() => { setMidiendo(m => !m); if (midiendo) setMedPts([]); }}
-        style={{ background: midiendo ? T.accent2 : T.card, border: `1px solid ${midiendo ? T.accent2 : T.border}`, color: midiendo ? "#fff" : T.sub, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, fontWeight: 800, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.25)" }}>📏 {midiendo ? "Cerrar medición" : "Medir"}</button>
+        style={{ background: midiendo ? T.accent2 : T.card, border: `1px solid ${midiendo ? T.accent2 : T.border}`, color: midiendo ? "#fff" : T.sub, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, fontWeight: 800, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.25)" }}><Ico n="regla" s={13} /> {midiendo ? "Cerrar medición" : "Medir"}</button>
       {midiendo && <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: "8px 11px", boxShadow: "0 2px 8px rgba(0,0,0,.25)", textAlign: "right" }}>
         <div style={{ fontSize: 15, fontWeight: 800, color: T.accent2 }}>{medPts.length > 1 ? kmFmt(medTotal) : "Tocá el mapa"}</div>
         {medPts.length > 1 && <div style={{ fontSize: 9.5, color: T.muted }}>{medPts.length} puntos · en línea recta</div>}
@@ -511,7 +531,7 @@ function Mini({ m, onBorrar, sel, onSel, tam = 92 }) {
       : <img src={url} style={{ width: "100%", height: "100%", objectFit: "cover" }} />)}
     {m.tipo === "video" && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}><div style={{ background: "rgba(0,0,0,.45)", borderRadius: "50%", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center" }}><Ico n="play" s={15} c="#fff" /></div></div>}
     {sel !== undefined && sel !== false && <div style={{ position: "absolute", top: 5, left: 5, background: T.accent, color: "#1a1205", borderRadius: "50%", width: 20, height: 20, fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{sel}</div>}
-    {onBorrar && <button onClick={(e) => { e.stopPropagation(); onBorrar(); }} style={{ position: "absolute", top: 4, right: 4, background: "rgba(0,0,0,.55)", border: "none", color: "#fff", borderRadius: "50%", width: 22, height: 22, fontSize: 12, cursor: "pointer" }}>✕</button>}
+    {onBorrar && <button onClick={(e) => { e.stopPropagation(); onBorrar(); }} style={{ position: "absolute", top: 4, right: 4, background: "rgba(0,0,0,.55)", border: "none", color: "#fff", borderRadius: "50%", width: 22, height: 22, fontSize: 12, cursor: "pointer" }}><Ico n="cerrar" s={11} c="#fff" /></button>}
   </div>);
 }
 
@@ -598,12 +618,12 @@ function Bitacora({ viaje, actualizar, media, recargarMedia }) {
       <div style={{ marginTop: 10 }}>
         {lugar
           ? <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(232,163,61,.1)", border: `1px solid ${T.accent}`, borderRadius: 10, padding: "9px 11px" }}>
-            <span style={{ fontSize: 14 }}>📍</span>
+            <Ico n="pin" s={14} c={T.accent} />
             <span style={{ flex: 1, fontSize: 12.5, color: T.text, fontWeight: 700 }}>{lugar.nombre}</span>
-            <button onClick={() => setLugar(null)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer", fontSize: 14 }}>✕</button>
+            <button onClick={() => setLugar(null)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer", fontSize: 14 }}><Ico n="cerrar" s={11} /></button>
           </div>
           : <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
-            {!viaje.vivido && <button onClick={marcarAca} disabled={buscandoGPS} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>📍 {buscandoGPS ? "Buscando…" : "Estoy acá (GPS)"}</button>}
+            {!viaje.vivido && <button onClick={marcarAca} disabled={buscandoGPS} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}><Ico n="pin" s={13} /> {buscandoGPS ? "Buscando…" : "Estoy acá (GPS)"}</button>}
             {(viaje.puntos || []).map((p, i) => <button key={i} onClick={() => setLugar({ nombre: p.nombre.split(",")[0], lat: p.lat, lon: p.lon })} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, cursor: "pointer" }}>{p.nombre.split(",")[0]}</button>)}
             <button onClick={() => setBuscarLugar(v2 => !v2)} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, cursor: "pointer" }}><Ico n="lupa" s={12} /> Otro lugar</button>
           </div>}
@@ -618,7 +638,7 @@ function Bitacora({ viaje, actualizar, media, recargarMedia }) {
 
     {/* Mapa del viaje o lista cronológica */}
     <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-      {[["mapa", "🗺 Mapa del viaje"], ["lista", "📖 Lista por día"]].map(([k, l]) => <button key={k} onClick={() => setVista(k)} style={{ flex: 1, padding: "9px", borderRadius: 9, border: `1px solid ${vista === k ? T.accent : T.border}`, background: vista === k ? "rgba(232,163,61,.12)" : T.card, color: vista === k ? T.accent : T.sub, fontSize: 12, fontWeight: 800, cursor: "pointer" }}>{l}</button>)}
+      {[["mapa", "mapa", "Mapa del viaje"], ["lista", "libro", "Lista por día"]].map(([k, ic, l]) => <button key={k} onClick={() => setVista(k)} style={{ flex: 1, padding: "9px", borderRadius: 9, border: `1px solid ${vista === k ? T.accent : T.border}`, background: vista === k ? "rgba(232,163,61,.12)" : T.card, color: vista === k ? T.accent : T.sub, fontSize: 12, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Ico n={ic} s={13} /> {l}</button>)}
     </div>
 
     {vista === "mapa" && <MapaRecuerdos viaje={viaje} entradas={entradas} media={media} lugarSel={lugarSel} setLugarSel={setLugarSel} onBorrarEntrada={borrarEntrada} />}
@@ -626,7 +646,7 @@ function Bitacora({ viaje, actualizar, media, recargarMedia }) {
     {vista === "lista" && entradas.length === 0 && <div style={{ textAlign: "center", color: T.muted, fontSize: 13, padding: "26px 20px", lineHeight: 1.6 }}>La bitácora está vacía.<br />El primer mate en la ruta merece una entrada.</div>}
     {vista === "lista" && entradas.map(en => (<div key={en.id} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: 14, marginBottom: 11 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
-        <div style={{ fontSize: 12, fontWeight: 800, color: T.accent }}>{fFecha(en.fecha)}{en.lugar ? <span style={{ color: T.sub, fontWeight: 600 }}> · 📍 {en.lugar.nombre}</span> : ""}</div>
+        <div style={{ fontSize: 12, fontWeight: 800, color: T.accent }}>{fFecha(en.fecha)}{en.lugar ? <span style={{ color: T.sub, fontWeight: 600 }}> · <Ico n="pin" s={10} /> {en.lugar.nombre}</span> : ""}</div>
         <button onClick={() => borrarEntrada(en)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer", padding: 2 }}><Ico n="tacho" s={14} /></button>
       </div>
       {en.texto && <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: deEntrada(en).length ? 9 : 0 }}>{en.texto}</div>}
@@ -680,11 +700,11 @@ function MapaRecuerdos({ viaje, entradas, media, lugarSel, setLugarSel, onBorrar
 
   return (<div>
     <div ref={ref} style={{ height: 300, borderRadius: T.rsm, overflow: "hidden", border: `1px solid ${T.border}`, background: "#0a0d12" }} />
-    {lista.length === 0 && <div style={{ textAlign: "center", color: T.muted, fontSize: 12.5, padding: "18px 20px", lineHeight: 1.6 }}>Todavía no hay recuerdos anclados al mapa.<br />Escribí una entrada y marcá el lugar con 📍.</div>}
+    {lista.length === 0 && <div style={{ textAlign: "center", color: T.muted, fontSize: 12.5, padding: "18px 20px", lineHeight: 1.6 }}>Todavía no hay recuerdos anclados al mapa.<br />Escribí una entrada y marcá el lugar.</div>}
     {lista.length > 0 && !lugarSel && <div style={{ fontSize: 12, color: T.sub, textAlign: "center", marginTop: 10 }}>Tocá un punto del mapa para revivir lo de ese lugar ({lista.length} lugar{lista.length > 1 ? "es" : ""} con recuerdos)</div>}
     {lugarSel && <div style={{ marginTop: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
-        <div style={{ fontSize: 15, fontWeight: 800, color: T.accent }}>📍 {lugarSel.lugar.nombre}</div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: T.accent, display: "flex", alignItems: "center", gap: 6 }}><Ico n="pin" s={16} /> {lugarSel.lugar.nombre}</div>
         <div style={{ flex: 1, fontSize: 11, color: T.muted }}>{lugarSel.entradas.length} entrada{lugarSel.entradas.length > 1 ? "s" : ""}</div>
         <button onClick={() => setLugarSel(null)} style={{ background: "none", border: `1px solid ${T.border}`, color: T.sub, borderRadius: 8, padding: "5px 10px", fontSize: 11, cursor: "pointer" }}>Cerrar</button>
       </div>
@@ -930,10 +950,10 @@ function DelLugarTab({ viaje, perfil, actualizar }) {
 
   return (<div>
     {!guia && <div style={{ background: "linear-gradient(135deg, rgba(232,163,61,.12), rgba(77,163,255,.07))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: 16, textAlign: "center" }}>
-      <div style={{ fontSize: 34, marginBottom: 6 }}>🎶🍽</div>
+      <div style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 10 }}><Ico n="nota" s={30} c={T.accent} /><Ico n="comida" s={30} c={T.accent} /></div>
       <div style={{ fontSize: 14.5, fontWeight: 800, color: T.text, marginBottom: 5 }}>Lo que se come y lo que suena</div>
       <div style={{ fontSize: 12.5, color: T.sub, lineHeight: 1.6, marginBottom: 13 }}>La IA arma la guía de tu recorrido: los platos imperdibles de cada región, dónde probarlos de verdad, y la música del lugar — con cada artista listo para sonar en Spotify. La banda sonora del viaje, antes de salir.</div>
-      <button onClick={armar} disabled={armando} style={{ background: armando ? T.card2 : T.accent, border: "none", color: armando ? T.sub : "#1a1205", borderRadius: T.rsm, padding: "13px 22px", fontSize: 13.5, fontWeight: 800, cursor: "pointer" }}>{armando ? "Armando la guía…" : "✨ Armar la guía del viaje"}</button>
+      <button onClick={armar} disabled={armando} style={{ background: armando ? T.card2 : T.accent, border: "none", color: armando ? T.sub : "#1a1205", borderRadius: T.rsm, padding: "13px 22px", fontSize: 13.5, fontWeight: 800, cursor: "pointer" }}>{armando ? "Armando la guía…" : <><Ico n="varita" s={13} /> Armar la guía del viaje</>}</button>
     </div>}
 
     {guia && <>
@@ -941,10 +961,10 @@ function DelLugarTab({ viaje, perfil, actualizar }) {
         <button onClick={() => { if (confirm("¿Rehacer la guía con la IA?")) armar(); }} disabled={armando} style={{ background: T.card, border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{armando ? "…" : "Rehacer"}</button>
       </div>
       {guia.regiones.map((r, ri) => (<div key={ri} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "14px 15px", marginBottom: 12 }}>
-        <div style={{ fontSize: 15, fontWeight: 800, color: T.accent, marginBottom: 10 }}>📍 {r.nombre}</div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: T.accent, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><Ico n="pin" s={16} /> {r.nombre}</div>
 
         {(r.comidas || []).length > 0 && <>
-          <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 7 }}>🍽 Para comer</div>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 7, display: "flex", alignItems: "center", gap: 5 }}><Ico n="comida" s={11} /> Para comer</div>
           {r.comidas.map((c2, ci) => (<div key={ci} style={{ marginBottom: 9, paddingLeft: 10, borderLeft: `2px solid ${T.border}` }}>
             <div style={{ fontSize: 13.5, fontWeight: 800, color: T.text }}>{c2.plato}</div>
             <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.5, marginTop: 1 }}>{c2.desc}</div>
@@ -952,7 +972,7 @@ function DelLugarTab({ viaje, perfil, actualizar }) {
           </div>))}
         </>}
 
-        <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".07em", margin: "12px 0 7px" }}>🎶 Para escuchar{r.genero ? ` — ${r.genero}` : ""}</div>
+        <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".07em", margin: "12px 0 7px", display: "flex", alignItems: "center", gap: 5 }}><Ico n="nota" s={11} /> Para escuchar{r.genero ? ` — ${r.genero}` : ""}</div>
         {(r.artistas || []).map((a, ai) => (<div key={ai} style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 7 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: T.text }}>{a.nombre}</div>
@@ -1048,7 +1068,7 @@ function VuelosGuardados({ viaje, actualizar, media }) {
 
   return (<div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 14 }}>
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
-      <div style={{ flex: 1, fontSize: 13, fontWeight: 800, color: T.text }}>✈️ Vuelos ya comprados</div>
+      <div style={{ flex: 1, fontSize: 13, fontWeight: 800, color: T.text, display: "flex", alignItems: "center", gap: 7 }}><Ico n="avion" s={15} c={T.accent} /> Vuelos ya comprados</div>
       {!form && <button onClick={nuevoForm} style={{ background: "rgba(232,163,61,.12)", border: `1px solid ${T.accent}`, color: T.accent, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>＋ Agregar</button>}
     </div>
     {vuelos.length === 0 && !form && <div style={{ fontSize: 11.5, color: T.sub, lineHeight: 1.5 }}>Si ya tienen el pasaje sacado en otro lado, cargá el número de vuelo, el horario, y adjuntá el boarding pass — queda a mano en el viaje, sin necesitar señal.</div>}
@@ -1108,34 +1128,34 @@ function ReservasTab({ viaje, actualizar, media }) {
   const abrir = (u) => window.open(u, "_blank");
 
   const SECCIONES = [
-    ["🛏 Dormir", [
+    ["cama:Dormir", [
       ["Booking", "#003580", `https://www.booking.com/searchresults.es.html?ss=${q}${f ? `&checkin=${f.in}&checkout=${f.out}` : ""}&group_adults=2`],
       ["Airbnb", "#FF385C", `https://www.airbnb.com.ar/s/${q}/homes?adults=2${f ? `&checkin=${f.in}&checkout=${f.out}` : ""}`],
       ["Despegar", "#4A148C", `https://www.despegar.com.ar/hoteles/`],
       ["Hostels", "#F26722", `https://www.spanish.hostelworld.com/s?q=${q}${f ? `&from=${f.in}&to=${f.out}` : ""}`],
     ]],
-    ["🚗 Alquilar auto", [
+    ["auto:Alquilar auto", [
       ["Kayak Autos", "#FF690F", `https://www.kayak.com.ar/cars/${q}${f ? `/${f.in}/${f.out}` : ""}`],
       ["RentalCars", "#0071C2", `https://www.rentalcars.com/es/`],
       ["Hertz", "#FFD100", `https://www.hertz.com.ar/`],
     ]],
-    ["🍽 Comer", [
+    ["comida:Comer", [
       ["Restaurantes cerca", "#34A853", `https://www.google.com/maps/search/${encodeURIComponent("mejores restaurantes en " + lugar)}`],
       ["TripAdvisor", "#00AF87", `https://www.tripadvisor.com.ar/Search?q=${encodeURIComponent(lugar + " restaurantes")}`],
       ["Parrillas", "#B45309", `https://www.google.com/maps/search/${encodeURIComponent("parrilla en " + lugar)}`],
     ]],
-    ["🎟 Paseos y actividades", [
+    ["ticket:Paseos y actividades", [
       ["Civitatis", "#E4405F", `https://www.civitatis.com/ar/buscar/?q=${q}`],
       ["GetYourGuide", "#FF5533", `https://www.getyourguide.es/s/?q=${q}${f ? `&date_from=${f.in}` : ""}`],
       ["Qué hacer", "#34A853", `https://www.google.com/maps/search/${encodeURIComponent("qué hacer en " + lugar)}`],
     ]],
-    ["🚌 Micros y trenes", [
+    ["bus:Micros y trenes", [
       ["Plataforma 10", "#0E7C3A", `https://www.plataforma10.com.ar/`],
       ["Omio (mundo)", "#3E2AD1", `https://www.omio.com.ar/`],
     ]],
   ];
 
-  const AUXILIO = [["⛽ Estación de servicio", "estación de servicio"], ["🏧 Cajero", "cajero automático"], ["💊 Farmacia", "farmacia de turno"], ["🔧 Gomería", "gomería"], ["🛒 Supermercado", "supermercado"], ["🏥 Hospital", "hospital"]];
+  const AUXILIO = [["gas", "Estación de servicio", "estación de servicio"], ["cajero", "Cajero", "cajero automático"], ["pastilla", "Farmacia", "farmacia de turno"], ["llave", "Gomería", "gomería"], ["carrito", "Supermercado", "supermercado"], ["cruz", "Hospital", "hospital"]];
 
   return (<div>
     <VuelosGuardados viaje={viaje} actualizar={actualizar} media={media} />
@@ -1144,7 +1164,7 @@ function ReservasTab({ viaje, actualizar, media }) {
         que además suma el punto al viaje (así Clima, mapa y bitácora
         tienen dónde anclarse más adelante). */}
     {puntos.length === 0 && <div style={{ background: T.card, border: `1px solid ${T.accent}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 14 }}>
-      <div style={{ fontSize: 13, fontWeight: 800, color: T.text, marginBottom: 8 }}>✈️ ¿A dónde vuelan?</div>
+      <div style={{ fontSize: 13, fontWeight: 800, color: T.text, marginBottom: 8, display: "flex", alignItems: "center", gap: 7 }}><Ico n="avion" s={15} c={T.accent} /> ¿A dónde vuelan?</div>
       <BuscarLugar placeholder="Bariloche, Roma, donde sea…" onElegir={(r) => { actualizar({ ...viaje, puntos: [...(viaje.puntos || []), r] }); setLugarSel(r.nombre.split(",")[0]); }} />
     </div>}
 
@@ -1160,7 +1180,7 @@ function ReservasTab({ viaje, actualizar, media }) {
 
     {/* cómo viajan a este lugar */}
     {lugar && <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-      {[["auto", "🚗 En auto"], ["avion", "✈️ En avión"]].map(([k, l]) => <button key={k} onClick={() => setModo(k)} style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1px solid ${modo === k ? T.accent : T.border}`, background: modo === k ? "rgba(232,163,61,.12)" : T.card, color: modo === k ? T.accent : T.sub, fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>{l}</button>)}
+      {[["auto", "auto", "En auto"], ["avion", "avion", "En avión"]].map(([k, ic, l]) => <button key={k} onClick={() => setModo(k)} style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1px solid ${modo === k ? T.accent : T.border}`, background: modo === k ? "rgba(232,163,61,.12)" : T.card, color: modo === k ? T.accent : T.sub, fontSize: 12.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Ico n={ic} s={14} /> {l}</button>)}
     </div>}
 
     {lugar && modo === "avion" && <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 10 }}>
@@ -1196,19 +1216,19 @@ function ReservasTab({ viaje, actualizar, media }) {
     </div>}
 
     {/* secciones */}
-    {lugar && modo === "auto" && SECCIONES.map(([titulo, links]) => (<div key={titulo} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "12px 13px", marginBottom: 10 }}>
-      <div style={{ fontSize: 12.5, fontWeight: 800, color: T.text, marginBottom: 8 }}>{titulo}</div>
+    {lugar && modo === "auto" && SECCIONES.map(([tit, links]) => { const [ic, titulo] = tit.split(":"); return (<div key={tit} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "12px 13px", marginBottom: 10 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 800, color: T.text, marginBottom: 8, display: "flex", alignItems: "center", gap: 7 }}><Ico n={ic} s={14} c={T.accent} /> {titulo}</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {links.map(([nom, color, url]) => <button key={nom} onClick={() => abrir(url)} style={{ background: color, border: "none", color: color === "#FFD100" ? "#1a1205" : "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{nom}</button>)}
       </div>
-    </div>))}
+    </div>); })}
 
     {/* auxilios en ruta: usan TU ubicación actual */}
     <div style={{ background: "linear-gradient(135deg, rgba(232,163,61,.1), rgba(77,163,255,.06))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: "12px 13px" }}>
-      <div style={{ fontSize: 12.5, fontWeight: 800, color: T.text, marginBottom: 2 }}>🆘 Ya en la ruta, cerca tuyo</div>
+      <div style={{ fontSize: 12.5, fontWeight: 800, color: T.text, marginBottom: 2, display: "flex", alignItems: "center", gap: 7 }}><Ico n="alerta" s={14} c={T.danger} /> Ya en la ruta, cerca tuyo</div>
       <div style={{ fontSize: 11, color: T.sub, marginBottom: 9 }}>Abren el mapa buscando alrededor de donde estás AHORA.</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {AUXILIO.map(([l, q2]) => <button key={l} onClick={() => abrir(`https://www.google.com/maps/search/${encodeURIComponent(q2)}`)} style={{ background: T.card, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "10px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{l}</button>)}
+        {AUXILIO.map(([ic, l, q2]) => <button key={l} onClick={() => abrir(`https://www.google.com/maps/search/${encodeURIComponent(q2)}`)} style={{ background: T.card, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "10px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}><Ico n={ic} s={13} /> {l}</button>)}
       </div>
     </div>
   </div>);
@@ -1251,10 +1271,10 @@ function ValijaTab({ viaje, perfil, climaResumen, actualizar }) {
 
   return (<div>
     {!valija && <div style={{ background: "linear-gradient(135deg, rgba(232,163,61,.12), rgba(77,163,255,.07))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: 16, textAlign: "center" }}>
-      <div style={{ fontSize: 34, marginBottom: 6 }}>🧳</div>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}><Ico n="valija" s={32} c={T.accent} /></div>
       <div style={{ fontSize: 14.5, fontWeight: 800, color: T.text, marginBottom: 5 }}>La valija, armada para este viaje</div>
       <div style={{ fontSize: 12.5, color: T.sub, lineHeight: 1.6, marginBottom: 13 }}>La IA junta el destino, el pronóstico real de tus días{perfil ? " y su estilo de viaje" : ""}, y te dice qué llevar y por qué. Tip: pasá antes por la pestaña Clima así el checklist sale con el pronóstico puesto.</div>
-      <button onClick={armar} disabled={armando} style={{ background: armando ? T.card2 : T.accent, border: "none", color: armando ? T.sub : "#1a1205", borderRadius: T.rsm, padding: "13px 22px", fontSize: 13.5, fontWeight: 800, cursor: "pointer" }}>{armando ? "Armando la valija…" : "✨ Armar el checklist"}</button>
+      <button onClick={armar} disabled={armando} style={{ background: armando ? T.card2 : T.accent, border: "none", color: armando ? T.sub : "#1a1205", borderRadius: T.rsm, padding: "13px 22px", fontSize: 13.5, fontWeight: 800, cursor: "pointer" }}>{armando ? "Armando la valija…" : <><Ico n="varita" s={13} /> Armar el checklist</>}</button>
     </div>}
 
     {valija && <>
@@ -1265,7 +1285,7 @@ function ValijaTab({ viaje, perfil, climaResumen, actualizar }) {
         </div>
         <button onClick={() => { if (confirm("¿Rehacer el checklist con la IA? Se pierde lo tildado.")) armar(); }} disabled={armando} style={{ background: T.card, border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "9px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>{armando ? "…" : "Rehacer"}</button>
       </div>
-      {listos === totItems && totItems > 0 && <div style={{ background: "rgba(61,214,140,.08)", border: `1px solid ${T.ok}`, borderRadius: T.rsm, padding: "11px 13px", marginBottom: 13, fontSize: 13, color: T.ok, fontWeight: 800, textAlign: "center" }}>🧳 ¡Valija completa! Que empiece el viaje.</div>}
+      {listos === totItems && totItems > 0 && <div style={{ background: "rgba(61,214,140,.08)", border: `1px solid ${T.ok}`, borderRadius: T.rsm, padding: "11px 13px", marginBottom: 13, fontSize: 13, color: T.ok, fontWeight: 800, textAlign: "center" }}>¡Valija completa! Que empiece el viaje.</div>}
       {valija.grupos.map((g, gi) => (<div key={gi} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 11 }}>
         <div style={{ fontSize: 12, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>{g.titulo} · {g.items.filter(i => i.ok).length}/{g.items.length}</div>
         {g.items.map(it => (<div key={it.id} onClick={() => toggle(gi, it.id)} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "7px 0", cursor: "pointer", opacity: it.ok ? .55 : 1 }}>
@@ -1293,7 +1313,7 @@ function AgregarItem({ onAgregar }) {
    Presupuesto total, cada gasto en dos toques, y la app responde lo
    importante: cuánto por día venimos gastando, cuánto queda, y si a
    este ritmo la plata llega hasta el final del viaje. */
-const CAT_GASTOS = [["nafta", "⛽ Nafta/peajes"], ["comida", "🍽 Comida"], ["hospedaje", "🛏 Hospedaje"], ["paseos", "🎟 Paseos"], ["compras", "🛍 Compras"], ["otros", "💳 Otros"]];
+const CAT_GASTOS = [["nafta", "gas", "Nafta/peajes"], ["comida", "comida", "Comida"], ["hospedaje", "cama", "Hospedaje"], ["paseos", "ticket", "Paseos"], ["compras", "carrito", "Compras"], ["otros", "tarjeta", "Otros"]];
 const monedaFmt = (n, m) => `${m === "USD" ? "USD " : "$"}${Math.round(n).toLocaleString("es-AR")}`;
 
 function GastosTab({ viaje, actualizar }) {
@@ -1431,7 +1451,7 @@ function HospedajeLinks({ lugar, f }) {
     {btn("#003580", "#fff", "Booking", `https://www.booking.com/searchresults.es.html?ss=${q}${fechasB}&group_adults=2`)}
     {btn("#FF385C", "#fff", "Airbnb", `https://www.airbnb.com.ar/s/${q}/homes?adults=2${fechasA}`)}
     {btn("#4A148C", "#fff", "Despegar", `https://www.despegar.com.ar/hoteles/`)}
-    {btn(T.card2, T.sub, "🏛 Turismo oficial", `https://www.google.com/search?q=${encodeURIComponent("turismo oficial " + lugar + " qué visitar")}`)}
+    <button onClick={() => abrir(`https://www.google.com/search?q=${encodeURIComponent("turismo oficial " + lugar + " qué visitar")}`)} style={{ background: T.card2, border: "none", color: T.sub, borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}><Ico n="museo" s={13} /> Turismo oficial</button>
   </div>);
 }
 
@@ -1478,7 +1498,7 @@ function PlannerIA({ viaje, actualizar, perfil }) {
       <input value={dias} onChange={e => setDias(e.target.value)} inputMode="numeric" placeholder="días"
         style={{ width: 70, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px", fontSize: 13, color: T.text, outline: "none", textAlign: "center" }} />
     </div>
-    <button onClick={armar} disabled={armando} style={{ width: "100%", background: armando ? T.card2 : T.accent, border: "none", color: armando ? T.sub : "#1a1205", borderRadius: T.rsm, padding: "14px", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>{armando ? "Armando su itinerario…" : "✨ Armar el itinerario para nosotros"}</button>
+    <button onClick={armar} disabled={armando} style={{ width: "100%", background: armando ? T.card2 : T.accent, border: "none", color: armando ? T.sub : "#1a1205", borderRadius: T.rsm, padding: "14px", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>{armando ? "Armando su itinerario…" : <><Ico n="varita" s={13} /> Armar el itinerario para nosotros</>}</button>
   </div>);
 }
 
@@ -1540,7 +1560,7 @@ function Ajustes({ cfg, guardarCfg, cerrar, onSalir }) {
 
       <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 7 }}>¿Les gusta manejar?</div>
       <div style={{ display: "flex", gap: 7, marginBottom: 15, flexWrap: "wrap" }}>
-        {[["ama", "🚗 Amamos la ruta"], ["justo", "Lo justo"], ["no", "Preferimos no manejar"]].map(([k, l]) => <button key={k} onClick={() => guardarCfg({ ...cfg, manejo: k })} style={chip(cfg.manejo === k)}>{l}</button>)}
+        {[["ama", "Amamos la ruta"], ["justo", "Lo justo"], ["no", "Preferimos no manejar"]].map(([k, l]) => <button key={k} onClick={() => guardarCfg({ ...cfg, manejo: k })} style={chip(cfg.manejo === k)}>{l}</button>)}
       </div>
       <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 7 }}>Ritmo</div>
       <div style={{ display: "flex", gap: 7, marginBottom: 15, flexWrap: "wrap" }}>
@@ -1548,7 +1568,7 @@ function Ajustes({ cfg, guardarCfg, cerrar, onSalir }) {
       </div>
       <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 7 }}>Presupuesto</div>
       <div style={{ display: "flex", gap: 7, marginBottom: 15, flexWrap: "wrap" }}>
-        {[["cuidado", "Cuidado"], ["medio", "Medio"], ["gustos", "✨ Darnos los gustos"]].map(([k, l]) => <button key={k} onClick={() => guardarCfg({ ...cfg, presupuesto: k })} style={chip(cfg.presupuesto === k)}>{l}</button>)}
+        {[["cuidado", "Cuidado"], ["medio", "Medio"], ["gustos", "Darnos los gustos"]].map(([k, l]) => <button key={k} onClick={() => guardarCfg({ ...cfg, presupuesto: k })} style={chip(cfg.presupuesto === k)}>{l}</button>)}
       </div>
       <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 7 }}>Lo que nos gusta</div>
       <div style={{ display: "flex", gap: 7, marginBottom: 15, flexWrap: "wrap" }}>
@@ -1623,7 +1643,7 @@ function ClimaTab({ viaje, onResumen }) {
     <div style={{ fontSize: 12.5, color: T.sub, lineHeight: 1.6, marginBottom: 12 }}>Pronóstico de 16 días para cada punto del recorrido. Los días de TU viaje se marcan en dorado. Si se viene nieve o tormenta, la app avisa — y le podés preguntar al copiloto si conviene correr la salida.</div>
 
     {alertas.length > 0 && <div style={{ background: "rgba(242,85,90,.1)", border: `1px solid ${T.danger}`, borderRadius: T.rsm, padding: "12px 13px", marginBottom: 14 }}>
-      <div style={{ fontSize: 12.5, fontWeight: 800, color: T.danger, marginBottom: 6 }}>⚠ Ojo con estos días del viaje</div>
+      <div style={{ fontSize: 12.5, fontWeight: 800, color: T.danger, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><Ico n="alerta" s={13} /> Ojo con estos días del viaje</div>
       {alertas.slice(0, 6).map((a, i) => <div key={i} style={{ fontSize: 12, color: T.text, lineHeight: 1.6 }}>{a.c.e} <b>{a.lugar}</b> — {fFecha(a.fecha)}: {a.c.n}{a.nieve > 0 ? ` (~${a.nieve} cm de nieve)` : ""}</div>)}
       <div style={{ fontSize: 11.5, color: T.sub, marginTop: 7 }}>Tocá el botón del copiloto 💬 y preguntale: "¿me conviene postergar la salida?" — ya tiene estos datos cargados.</div>
     </div>}
@@ -1633,7 +1653,7 @@ function ClimaTab({ viaje, onResumen }) {
     {err && <div style={{ textAlign: "center", color: T.danger, fontSize: 12.5, padding: 12 }}>{err}</div>}
 
     {(datos || []).map((r, ri) => (<div key={ri} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 11 }}>
-      <div style={{ fontSize: 13.5, fontWeight: 800, color: T.text, marginBottom: 9 }}>📍 {r.punto.nombre.split(",").slice(0, 2).join(",")}</div>
+      <div style={{ fontSize: 13.5, fontWeight: 800, color: T.text, marginBottom: 9, display: "flex", alignItems: "center", gap: 6 }}><Ico n="pin" s={14} /> {r.punto.nombre.split(",").slice(0, 2).join(",")}</div>
       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
         {r.dias.map((d, di) => {
           const c = CLIMA_COD(d.cod); const ev = enViaje(d.fecha);
@@ -1791,7 +1811,7 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
               {puntos.length > 2 || i > 0 ? <button onClick={(e) => { e.stopPropagation(); sacar(i); }} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer", padding: 3 }}><Ico n="tacho" s={15} /></button> : null}
             </div>
             {abierto && <div style={{ padding: "0 12px 12px" }}>
-              <div style={{ fontSize: 11.5, fontWeight: 800, color: T.text, marginBottom: 6 }}>🛏 Dormir en {p.nombre.split(",")[0]}</div>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: T.text, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><Ico n="cama" s={12} /> Dormir en {p.nombre.split(",")[0]}</div>
               <HospedajeLinks lugar={p.nombre.split(",").slice(0, 2).join(",")} f={(fechasParada(viaje))[p.nombre] || null} />
             </div>}
           </div>); })}
@@ -1810,7 +1830,7 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
           <button onClick={abrirGoogleMaps} disabled={puntos.length < 2} style={{ flex: 1, background: T.card, border: `1px solid ${T.border}`, color: T.text, borderRadius: T.rsm, padding: "13px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}><Ico n="gmaps" s={15} c={T.accent2} /> Navegar con Maps</button>
         </div>
         {puntos.length >= 2 && <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", background: T.card, border: `1px solid ${T.border}`, borderRadius: T.rsm, padding: "11px 12px" }}>
-          <span style={{ fontSize: 17 }}>🚘</span>
+          <Ico n="auto" s={18} c={T.text} />
           <div style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: T.sub, lineHeight: 1.45 }}><b style={{ color: T.text }}>Verlo en el auto:</b> mandá el viaje al navegador y enchufá el teléfono — aparece en CarPlay / Android Auto con todas las paradas.</div>
           <button onClick={abrirAppleMaps} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "9px 11px", fontSize: 11.5, fontWeight: 800, cursor: "pointer", flexShrink: 0 }}> Apple Maps</button>
         </div>}
@@ -1828,7 +1848,7 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
           </div>); }); })()}
         </div>}
         {sugerencias.length > 0 && <div style={{ marginTop: 18 }}>
-          <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 9 }}>★ Joyitas en el camino ({sugerencias.length})</div>
+          <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 9, display: "flex", alignItems: "center", gap: 6 }}><Ico n="estrella" s={13} /> Joyitas en el camino ({sugerencias.length})</div>
           {sugerencias.map(sg => (<div key={sg.id} style={{ background: T.card, border: `1px solid ${T.border}`, borderLeft: `3px solid ${T.accent}`, borderRadius: T.rsm, padding: "11px 12px", marginBottom: 7 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
               <div style={{ minWidth: 0, flex: 1 }}>
@@ -1907,7 +1927,7 @@ function CardViaje({ v, onAbrir, onBorrar }) {
     <div style={{ position: "relative", padding: "15px 16px", display: "flex", alignItems: "flex-end", minHeight: fotos.length ? 150 : 76, boxSizing: "border-box" }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 16, fontWeight: 800, color: "#fff", textShadow: fotos.length ? "0 1px 6px rgba(0,0,0,.6)" : "none" }}>{v.nombre}</div>
-        <div style={{ fontSize: 11.5, color: fotos.length ? "rgba(255,255,255,.85)" : T.sub, marginTop: 2, textShadow: fotos.length ? "0 1px 4px rgba(0,0,0,.6)" : "none" }}>{v.vivido ? "📷 Viaje vivido" : (o && d ? `${o} → ${d}` : o ? `Desde ${o}` : "Sin recorrido aún")}{v.fechaInicio ? ` · ${v.vivido ? fFecha(v.fechaInicio) : "sale " + fFecha(v.fechaInicio)}` : ""}{nEnt ? ` · ${nEnt} recuerdo${nEnt > 1 ? "s" : ""}` : ""}</div>
+        <div style={{ fontSize: 11.5, color: fotos.length ? "rgba(255,255,255,.85)" : T.sub, marginTop: 2, textShadow: fotos.length ? "0 1px 4px rgba(0,0,0,.6)" : "none" }}>{v.vivido ? "Viaje vivido" : (o && d ? `${o} → ${d}` : o ? `Desde ${o}` : "Sin recorrido aún")}{v.fechaInicio ? ` · ${v.vivido ? fFecha(v.fechaInicio) : "sale " + fFecha(v.fechaInicio)}` : ""}{nEnt ? ` · ${nEnt} recuerdo${nEnt > 1 ? "s" : ""}` : ""}</div>
       </div>
       <button onClick={(e) => { e.stopPropagation(); onBorrar(); }} style={{ background: "rgba(0,0,0,.35)", border: "none", color: "rgba(255,255,255,.8)", borderRadius: 9, cursor: "pointer", padding: "7px 8px" }}><Ico n="tacho" s={15} /></button>
     </div>
@@ -1953,7 +1973,7 @@ function ChatIdeas({ cfg, viajes }) {
   return (<>
     {/* la tarjeta-invitación en la portada */}
     <div onClick={() => setAbierto(true)} style={{ background: "linear-gradient(135deg, rgba(232,163,61,.14), rgba(77,163,255,.08))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: "14px 16px", marginBottom: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}>
-      <div style={{ fontSize: 26 }}>🧭</div>
+      <div style={{ width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center" }}><Ico n="brujula" s={24} c={T.accent} /></div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14.5, fontWeight: 800, color: T.text }}>¿A dónde vamos la próxima?</div>
         <div style={{ fontSize: 11.5, color: T.sub, marginTop: 2, lineHeight: 1.45 }}>Preguntale al copiloto sin cargar nada: "tengo 4 días, ¿qué me recomendás?"</div>
@@ -1965,7 +1985,7 @@ function ChatIdeas({ cfg, viajes }) {
       <div style={{ padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top))", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${T.border}` }}>
         <button onClick={() => setAbierto(false)} style={{ background: "none", border: "none", color: T.text, cursor: "pointer", padding: 4 }}><Ico n="volver" s={22} /></button>
         <div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: T.text }}>🧭 ¿A dónde vamos?</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: T.text, display: "flex", alignItems: "center", gap: 7 }}><Ico n="brujula" s={17} c={T.accent} /> ¿A dónde vamos?</div>
           <div style={{ fontSize: 10.5, color: T.sub }}>El copiloto ya sabe cómo viajan y qué viajes hicieron</div>
         </div>
       </div>
@@ -2074,7 +2094,7 @@ function NuevoVivido({ onCrear, cerrar }) {
   return (<div style={{ position: "fixed", inset: 0, zIndex: 200, background: T.bg, overflowY: "auto" }}>
     <div style={{ padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top))", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${T.border}` }}>
       <button onClick={cerrar} style={{ background: "none", border: "none", color: T.text, cursor: "pointer", padding: 4 }}><Ico n="volver" s={22} /></button>
-      <div style={{ fontSize: 16, fontWeight: 800, color: T.text }}>📷 Un viaje ya vivido</div>
+      <div style={{ fontSize: 16, fontWeight: 800, color: T.text, display: "flex", alignItems: "center", gap: 8 }}><Ico n="cam" s={18} c={T.text} /> Un viaje ya vivido</div>
     </div>
     <div style={{ padding: 18, paddingBottom: 60 }}>
       <div style={{ fontSize: 12.5, color: T.sub, lineHeight: 1.6, marginBottom: 18 }}>Para los viajes de antes de la app: contá el recorrido que hicieron, etapa por etapa — Buenos Aires → Mendoza → San Martín de los Andes — con las fotos de cada lugar. Queda guardado como si lo hubieran cargado en el momento.</div>
@@ -2096,12 +2116,12 @@ function NuevoVivido({ onCrear, cerrar }) {
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 10, color: T.sub, marginBottom: 3 }}>¿Dónde?</div>
             {et.lugarSel ? <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(232,163,61,.1)", border: `1px solid ${T.accent}`, borderRadius: 9, padding: "9px 10px" }}>
-              <span style={{ fontSize: 12 }}>📍</span>
+              <Ico n="pin" s={13} c={T.accent} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 12, color: T.text, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{et.lugarSel.nombre.split(",").slice(0, 2).join(",")}</div>
                 {et.lugarSel.detectado && <div style={{ fontSize: 9.5, color: T.accent }}>De la foto ✓</div>}
               </div>
-              <button onClick={() => setEtapa(et.id, { lugarSel: null })} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}>✕</button>
+              <button onClick={() => setEtapa(et.id, { lugarSel: null })} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="cerrar" s={11} /></button>
             </div> : <div>
               <div style={{ display: "flex", gap: 5 }}>
                 <input value={et.lugarTxt} onChange={e => setEtapa(et.id, { lugarTxt: e.target.value })} onKeyDown={e => e.key === "Enter" && buscarLugarEtapa(et.id, et.lugarTxt)} placeholder="Mendoza"
@@ -2111,7 +2131,7 @@ function NuevoVivido({ onCrear, cerrar }) {
               {et.resLugar.length > 0 && <div style={{ marginTop: 5, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, overflow: "hidden" }}>
                 {et.resLugar.map((r, ri) => <div key={ri} onClick={() => setEtapa(et.id, { lugarSel: r, resLugar: [], lugarTxt: "" })} style={{ padding: "8px 10px", fontSize: 11.5, color: T.text, cursor: "pointer", borderTop: ri ? `1px solid ${T.border}` : "none" }}>{r.nombre}</div>)}
               </div>}
-              {et.detectando && <div style={{ fontSize: 10.5, color: T.sub, marginTop: 5 }}>📍 Buscando la ubicación en la foto…</div>}
+              {et.detectando && <div style={{ fontSize: 10.5, color: T.sub, marginTop: 5, display: "flex", alignItems: "center", gap: 5 }}><Ico n="pin" s={11} /> Buscando la ubicación en la foto…</div>}
             </div>}
           </div>
           <div style={{ width: 118 }}>
@@ -2125,8 +2145,8 @@ function NuevoVivido({ onCrear, cerrar }) {
         <input ref={r => fileRefs.current[et.id] = r} type="file" accept="image/*,video/*" multiple onChange={e => { const files = Array.from(e.target.files || []); e.target.value = ""; elegirArchivosEtapa(et.id, files); }} style={{ display: "none" }} />
         {et.archivos.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 9 }}>
           {et.archivos.map((f, fi) => (<div key={fi} style={{ position: "relative", width: 60, height: 60, borderRadius: 8, overflow: "hidden", border: `1px solid ${T.border}`, background: T.card2 }}>
-            {f.type.startsWith("video") ? <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🎬</div> : <img src={URL.createObjectURL(f)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
-            <button onClick={() => setEtapa(et.id, e2 => ({ archivos: e2.archivos.filter((_, j) => j !== fi) }))} style={{ position: "absolute", top: 2, right: 2, background: "rgba(0,0,0,.55)", border: "none", color: "#fff", borderRadius: "50%", width: 17, height: 17, fontSize: 10, cursor: "pointer" }}>✕</button>
+            {f.type.startsWith("video") ? <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><Ico n="peli" s={16} c={T.sub} /></div> : <img src={URL.createObjectURL(f)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+            <button onClick={() => setEtapa(et.id, e2 => ({ archivos: e2.archivos.filter((_, j) => j !== fi) }))} style={{ position: "absolute", top: 2, right: 2, background: "rgba(0,0,0,.55)", border: "none", color: "#fff", borderRadius: "50%", width: 17, height: 17, fontSize: 10, cursor: "pointer" }}><Ico n="cerrar" s={11} c="#fff" /></button>
           </div>))}
         </div>}
       </div>))}
@@ -2165,7 +2185,7 @@ function SelectorPerfil({ onEntrar }) {
 
   return (<div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", justifyContent: "center", padding: 24 }}>
     <div style={{ textAlign: "center", marginBottom: 30 }}>
-      <div style={{ fontSize: 40, marginBottom: 8 }}>🧭</div>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}><Ico n="brujula" s={38} c={T.accent} /></div>
       <div style={{ fontSize: 22, fontWeight: 800, color: T.text }}>Mis Viajes</div>
       <div style={{ fontSize: 12.5, color: T.sub, marginTop: 6, lineHeight: 1.5 }}>Cada código tiene su propio espacio, separado del resto.<br />Sin mail, sin contraseña — el que uses vos.</div>
     </div>
@@ -2254,8 +2274,8 @@ function MisViajesApp({ onSalir }) {
         <div onClick={e => e.stopPropagation()} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: 22, width: "100%", maxWidth: 340 }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: T.text, textAlign: "center", marginBottom: 4 }}>¿Cómo van a viajar?</div>
           <div style={{ fontSize: 12, color: T.sub, textAlign: "center", lineHeight: 1.5, marginBottom: 18 }}>Si es en auto, arrancamos con el mapa y la ruta.<br />Si es en avión, vamos directo a buscar el pasaje.</div>
-          <button onClick={() => nuevoViaje("auto")} style={{ width: "100%", background: T.accent, border: "none", color: "#1a1205", borderRadius: T.rsm, padding: "16px", fontSize: 14.5, fontWeight: 800, cursor: "pointer", marginBottom: 10 }}>🚗 En auto</button>
-          <button onClick={() => nuevoViaje("avion")} style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: T.rsm, padding: "16px", fontSize: 14.5, fontWeight: 800, cursor: "pointer" }}>✈️ En avión</button>
+          <button onClick={() => nuevoViaje("auto")} style={{ width: "100%", background: T.accent, border: "none", color: "#1a1205", borderRadius: T.rsm, padding: "16px", fontSize: 14.5, fontWeight: 800, cursor: "pointer", marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}><Ico n="auto" s={17} /> En auto</button>
+          <button onClick={() => nuevoViaje("avion")} style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: T.rsm, padding: "16px", fontSize: 14.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}><Ico n="avion" s={17} /> En avión</button>
         </div>
       </div>}
       <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
