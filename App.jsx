@@ -28,6 +28,7 @@ const hFmt = (s) => { const h = Math.floor(s / 3600), m = Math.round((s % 3600) 
 const hoyISO = () => new Date().toISOString().slice(0, 10);
 const fFecha = (iso) => { if (!iso) return "—"; const d = new Date(iso + "T12:00:00"); return d.toLocaleDateString("es-AR", { day: "numeric", month: "short" }); };
 const diasEntre = (a, b) => Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 86400000);
+const fFechaLarga = (iso) => { if (!iso) return ""; const d = new Date(iso + "T12:00:00"); return d.toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" }); };   // "10 de noviembre de 2026" — lenguaje natural, para que Google Flights lo entienda bien
 
 /* ── PERFILES: cada código, su propio espacio ────────────────────
    Sin mail, sin contraseña — un código que cada uno elige (o le pasan)
@@ -355,7 +356,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.54 · 26 jul 2026";
+const APP_VER = "v10.55 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1779,7 +1780,7 @@ function ReservasTab({ viaje, actualizar, media, cfg }) {
 
       <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>{resultadoVuelos ? "Ahora sí, a reservar" : "O ir directo a"}</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
-        {[["Google Flights", "#4285F4", `https://www.google.com/travel/flights?q=${encodeURIComponent(`vuelos ${origenVuelo ? "de " + origenVuelo + " " : ""}a ${lugar}` + (f?.in && f?.out ? ` del ${f.in} al ${f.out}` : f?.in ? " el " + f.in : ""))}`],
+        {[["Google Flights", "#4285F4", `https://www.google.com/travel/flights?q=${encodeURIComponent(`vuelos ${origenVuelo ? "de " + origenVuelo + " " : ""}a ${lugar}` + (f?.in && f?.out ? ` del ${fFechaLarga(f.in)} al ${fFechaLarga(f.out)}` : f?.in ? " el " + fFechaLarga(f.in) : ""))}`],
           ["Despegar Vuelos", "#4A148C", "https://www.despegar.com.ar/vuelos/"],
           ["Kayak", "#FF690F", (() => { const co = codigoAeropuerto(origenVuelo), cd = codigoAeropuerto(lugar); return co && cd && f?.in ? `https://www.kayak.com.ar/flights/${co}-${cd}/${f.in}${f.out ? `/${f.out}` : ""}` : `https://www.kayak.com.ar/flights`; })()]]
           .map(([nom, color, url]) => <button key={nom} onClick={() => abrir(url)} style={{ background: color, border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{nom}</button>)}
