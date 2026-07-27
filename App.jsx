@@ -304,7 +304,7 @@ async function leerVoucherIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.32 · 26 jul 2026";
+const APP_VER = "v10.33 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1335,6 +1335,17 @@ function VuelosGuardados({ viaje, actualizar, media, cfg }) {
       </div>
       <PanelHorarioVuelo viaje={viaje} vuelo={v2} actualizar={actualizar} cfg={cfg} />
     </div>))}
+
+    {vuelos.length > 0 && <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 14 }}>
+      <div style={{ fontSize: 13, fontWeight: 800, color: T.text, marginBottom: 4, display: "flex", alignItems: "center", gap: 7 }}><Ico n="cruz" s={15} c={T.danger} /> Seguro médico de viaje</div>
+      <div style={{ fontSize: 11, color: T.sub, lineHeight: 1.5, marginBottom: 10 }}>{vuelos.some(v2 => v2.internacional) ? "Con vuelo internacional, es prácticamente obligatorio — muchos países ni te dejan entrar sin cobertura médica. " : ""}Se contrata una vez para todo el viaje, no por vuelo.</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <button onClick={() => window.open("https://www.assistcard.com/ar", "_blank")} style={{ background: "#0057A3", border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>Assist Card</button>
+        <button onClick={() => window.open("https://www.universal-assistance.com/ar", "_blank")} style={{ background: "#00558C", border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>Universal Assistance</button>
+        <button onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent("comparar seguro de viaje a " + (vuelos[vuelos.length - 1]?.destino || ""))}`, "_blank")} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>Comparar otras</button>
+      </div>
+    </div>}
+
     {form && <div style={{ marginTop: 6 }}>
       <div style={{ display: "flex", gap: 7, marginBottom: 7 }}>
         <input value={form.aerolinea} onChange={e => setForm({ ...form, aerolinea: e.target.value })} placeholder="Aerolínea" style={IN} />
@@ -1539,12 +1550,13 @@ function ValijaTab({ viaje, perfil, climaResumen, actualizar }) {
       {listos === totItems && totItems > 0 && <div style={{ background: "rgba(61,214,140,.08)", border: `1px solid ${T.ok}`, borderRadius: T.rsm, padding: "11px 13px", marginBottom: 13, fontSize: 13, color: T.ok, fontWeight: 800, textAlign: "center" }}>¡Valija completa! Que empiece el viaje.</div>}
       {valija.grupos.map((g, gi) => (<div key={gi} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 11 }}>
         <div style={{ fontSize: 12, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>{g.titulo} · {g.items.filter(i => i.ok).length}/{g.items.length}</div>
-        {g.items.map(it => (<div key={it.id} onClick={() => toggle(gi, it.id)} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "7px 0", cursor: "pointer", opacity: it.ok ? .55 : 1 }}>
-          <div style={{ width: 21, height: 21, borderRadius: 7, border: `2px solid ${it.ok ? T.ok : T.border}`, background: it.ok ? T.ok : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{it.ok && <span style={{ color: "#0E1116", fontSize: 13, fontWeight: 900 }}>✓</span>}</div>
-          <div style={{ minWidth: 0 }}>
+        {g.items.map(it => (<div key={it.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "7px 0", opacity: it.ok ? .55 : 1 }}>
+          <div onClick={() => toggle(gi, it.id)} style={{ width: 21, height: 21, borderRadius: 7, border: `2px solid ${it.ok ? T.ok : T.border}`, background: it.ok ? T.ok : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1, cursor: "pointer" }}>{it.ok && <span style={{ color: "#0E1116", fontSize: 13, fontWeight: 900 }}>✓</span>}</div>
+          <div onClick={() => toggle(gi, it.id)} style={{ minWidth: 0, flex: 1, cursor: "pointer" }}>
             <div style={{ fontSize: 13.5, fontWeight: 700, color: T.text, textDecoration: it.ok ? "line-through" : "none" }}>{it.t}</div>
             {it.por && <div style={{ fontSize: 11, color: T.sub, lineHeight: 1.45, marginTop: 1 }}>{it.por}</div>}
           </div>
+          {!it.ok && <button onClick={() => window.open(`https://listado.mercadolibre.com.ar/${encodeURIComponent(it.t)}`, "_blank")} title="Dónde comprarlo" style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.accent, borderRadius: 8, padding: "6px 8px", cursor: "pointer", flexShrink: 0, marginTop: 1 }}><Ico n="carrito" s={13} /></button>}
         </div>))}
         <AgregarItem onAgregar={(t) => agregarItem(gi, t)} />
       </div>))}
