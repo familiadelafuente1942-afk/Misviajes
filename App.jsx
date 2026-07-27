@@ -238,6 +238,21 @@ async function llamarIA(messages, system, maxTokens = 2500) {
   if (j.error) throw new Error(j.error.message || "Error de IA");
   return (j.content || []).map(c => c.text || "").join("\n").trim();
 }
+// Misma llamada, pero con la herramienta de búsqueda web REAL activada
+// — para cuando hace falta que la IA busque algo actual (vuelos, precios
+// de referencia) en vez de contestar de memoria. Va con más tiempo de
+// margen: busca y después arma la respuesta, tarda más que un chat común.
+async function llamarIAConBusqueda(messages, system, maxTokens = 1200) {
+  const body = JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, system, messages, tools: [{ type: "web_search_20250305", name: "web_search" }] });
+  let j = null;
+  try { const r = await fetchConLimite("/api/claude", { method: "POST", headers: { "Content-Type": "application/json" }, body }, 45000); j = await r.json(); } catch { j = null; }
+  if (!j || j.error) {
+    try { const r2 = await fetchConLimite("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body }, 20000); j = await r2.json(); }
+    catch { throw new Error("No pude conectar con la IA (revisá la conexión y probá de nuevo)."); }
+  }
+  if (j.error) throw new Error(j.error.message || "Error de IA");
+  return (j.content || []).map(c => c.text || "").join("\n").trim();
+}
 /* Código de tiempo WMO → emoji + nombre + qué tan jodido es para manejar */
 const CLIMA_COD = (c) => {
   if (c === 0) return { e: "☀️", n: "Despejado", nivel: 0 };
@@ -340,7 +355,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.53 · 26 jul 2026";
+const APP_VER = "v10.54 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1675,6 +1690,19 @@ function ReservasTab({ viaje, actualizar, media, cfg }) {
   const [modo, setModo] = useState(viaje.modoViaje === "avion" ? "avion" : "auto");   // arranca en el modo elegido al crear el viaje
   const [region, setRegion] = useState(regionSugerida);
   const [origenVuelo, setOrigenVuelo] = useState((viaje.origenViaje || cfg?.casa?.nombre || puntos[0]?.nombre || "").split(",")[0]);
+  const [buscandoVuelos, setBuscandoVuelos] = useState(false);
+  const [resultadoVuelos, setResultadoVuelos] = useState("");
+  async function buscarVuelosIA() {
+    if (!origenVuelo.trim() || !lugar) { alert("Completá desde dónde y a dónde van."); return; }
+    setBuscandoVuelos(true); setResultadoVuelos("");
+    try {
+      const sys = "Sos un asistente de viajes que busca información REAL y actual en internet sobre vuelos, usando la herramienta de búsqueda web que tenés disponible. NUNCA inventes números de vuelo, horarios exactos ni precios que no hayas encontrado buscando de verdad — si no encontrás datos confiables, decilo honestamente en vez de inventar.";
+      const prompt = `Buscá información actual sobre vuelos de ${origenVuelo} a ${lugar}${f?.in ? `, saliendo el ${f.in}` : ""}${f?.out ? ` y volviendo el ${f.out}` : ""}.\n\nContame en pocas líneas: qué aerolíneas cubren esta ruta, si hay vuelos directos o con escala (y dónde suelen hacer escala), la duración aproximada, y si encontrás precios de referencia recientes, un rango aproximado con la fuente. Es una guía para saber qué esperar antes de ir a reservar — no una reserva en sí.`;
+      const resp = await llamarIAConBusqueda([{ role: "user", content: prompt }], sys, 1200);
+      setResultadoVuelos(resp || "No encontré información confiable ahora mismo — probá directo en los buscadores de abajo.");
+    } catch (e) { setResultadoVuelos(""); alert(e.message); }
+    setBuscandoVuelos(false);
+  }
   // si el lugar elegido tiene fechas en el itinerario, van al enlace
   const f = Object.entries(fp).find(([n]) => n.toLowerCase().includes(lugar.toLowerCase()))?.[1]
     || (viaje.fechaInicio && viaje.fechaVuelta ? { in: viaje.fechaInicio, out: viaje.fechaVuelta }   // la fecha de vuelta real, guardada tal cual — sin sumar días de más
@@ -1744,7 +1772,12 @@ function ReservasTab({ viaje, actualizar, media, cfg }) {
         </div>
       </div>
 
-      <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>Buscadores</div>
+      <button onClick={buscarVuelosIA} disabled={buscandoVuelos} style={{ width: "100%", background: buscandoVuelos ? T.card2 : T.accent, border: "none", color: buscandoVuelos ? T.sub : "#1a1205", borderRadius: 9, padding: "12px", fontSize: 12.5, fontWeight: 800, cursor: "pointer", marginBottom: 9, display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+        <Ico n="varita" s={13} /> {buscandoVuelos ? "Buscando vuelos reales…" : "Buscar vuelos con IA"}
+      </button>
+      {resultadoVuelos && <div style={{ background: T.card2, border: `1px solid ${T.accent}`, borderRadius: 10, padding: "12px 13px", marginBottom: 13, fontSize: 12.5, color: T.text, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{resultadoVuelos}</div>}
+
+      <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>{resultadoVuelos ? "Ahora sí, a reservar" : "O ir directo a"}</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
         {[["Google Flights", "#4285F4", `https://www.google.com/travel/flights?q=${encodeURIComponent(`vuelos ${origenVuelo ? "de " + origenVuelo + " " : ""}a ${lugar}` + (f?.in && f?.out ? ` del ${f.in} al ${f.out}` : f?.in ? " el " + f.in : ""))}`],
           ["Despegar Vuelos", "#4A148C", "https://www.despegar.com.ar/vuelos/"],
