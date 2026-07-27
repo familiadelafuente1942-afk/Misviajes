@@ -304,7 +304,7 @@ async function leerVoucherIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.42 · 26 jul 2026";
+const APP_VER = "v10.43 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -937,8 +937,8 @@ function ClipMaker({ viaje, media }) {
       <span style={{ flex: 1, fontSize: 12.5, color: T.text, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{audioFile.name}</span>
       <button onClick={() => setAudioFile(null)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="cerrar" s={11} /></button>
     </div> : <>
-      <button onClick={() => audioRef.current?.click()} style={{ width: "100%", background: T.card, border: `1.5px dashed ${T.border}`, color: T.text, borderRadius: 10, padding: "11px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", marginBottom: 5 }}><Ico n="nota" s={13} c={T.accent} /> Elegir una canción del teléfono</button>
-      <div style={{ fontSize: 10.5, color: T.muted, lineHeight: 1.4, marginBottom: 12 }}>Tiene que ser un archivo de audio que ya tengas (no se puede bajar de Spotify por licencias). Si querés música de Spotify de verdad, subí el clip mudo y agregala desde el buscador de música de Instagram o TikTok al compartirlo.</div>
+      <button onClick={() => audioRef.current?.click()} style={{ width: "100%", background: T.card, border: `1.5px dashed ${T.border}`, color: T.text, borderRadius: 10, padding: "11px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", marginBottom: 5 }}><Ico n="nota" s={13} c={T.accent} /> Elegir un archivo de audio</button>
+      <div style={{ fontSize: 10.5, color: T.muted, lineHeight: 1.4, marginBottom: 12 }}>Al tocar, elegí <b style={{ color: T.sub }}>Examinar / Archivos</b> (no va a aparecer la app Música — Apple no deja que ninguna página web acceda a esa biblioteca, ni instalada como app). Sirve cualquier mp3, m4a o audio que ya tengas guardado como archivo: en iCloud Drive, algo que te mandaron, grabado, exportado de GarageBand. Si específicamente querés una canción de Spotify sonando, subí el clip mudo y agregala desde el buscador de música de Instagram o TikTok al compartirlo — esas apps sí tienen licencia para eso.</div>
     </>}
     <input ref={audioRef} type="file" accept="audio/*" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) setAudioFile(f); }} style={{ display: "none" }} />
 
