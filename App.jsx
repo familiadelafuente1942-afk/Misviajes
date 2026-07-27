@@ -268,8 +268,31 @@ async function dondeEstoy() {
 }
 const extraerJSON = (t) => { const m = t.match(/\[[\s\S]*\]/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 
+/* ── La IA lee el voucher/boarding pass y completa los datos sola ───
+   Foto o PDF, va como imagen/documento directo al mismo endpoint de IA
+   de toda la app — nada de OCR aparte, es la misma Claude que arma
+   itinerarios la que ahora lee pasajes. */
+async function archivoABase64(blob) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(blob); });
+}
+async function leerVoucherIA(file) {
+  try {
+    const esPdf = file.type === "application/pdf";
+    const blob = esPdf ? file : await comprimirFoto(file);   // fotos: comprimidas a JPEG, liviano y compatible
+    const data = await archivoABase64(blob);
+    const bloque = esPdf
+      ? { type: "document", source: { type: "base64", media_type: "application/pdf", data } }
+      : { type: "image", source: { type: "base64", media_type: "image/jpeg", data } };
+    const sys = "Sos un asistente que lee boarding passes, pasajes aéreos y confirmaciones de reserva. Extraés los datos exactos del documento. Respondés SOLO un JSON válido, sin texto adicional ni markdown.";
+    const prompt = `Leé este pasaje/boarding pass y extraé: aerolínea, número de vuelo, fecha del vuelo, hora de salida, hora de llegada, ciudad u aeropuerto de origen, ciudad u aeropuerto de destino.\n\nRespondé SOLO este JSON (dejá "" en lo que no encuentres en el documento):\n{"aerolinea":"","numero":"","fecha":"AAAA-MM-DD","horaSalida":"HH:MM","horaLlegada":"HH:MM","origen":"","destino":""}`;
+    const resp = await llamarIA([{ role: "user", content: [bloque, { type: "text", text: prompt }] }], sys, 700);
+    const m = resp.match(/\{[\s\S]*\}/);
+    return m ? JSON.parse(m[0]) : null;
+  } catch { return null; }
+}
+
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.25 · 26 jul 2026";
+const APP_VER = "v10.26 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1040,13 +1063,34 @@ function VuelosGuardados({ viaje, actualizar, media }) {
   const vuelos = viaje.vuelos || [];
   const IN = { flex: 1, minWidth: 0, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "9px 10px", fontSize: 12.5, color: T.text, outline: "none", boxSizing: "border-box" };
 
+  const [leyendoIA, setLeyendoIA] = useState(false);
   function baseForm(archivo) {
     return { aerolinea: "", numero: "", fecha: "", horaSalida: "", horaLlegada: "", origen: puntos[0]?.nombre?.split(",")[0] || "", destino: puntos[puntos.length - 1]?.nombre?.split(",")[0] || "", archivo: archivo || null };
   }
+  // Un solo camino para "llegó un archivo nuevo": lo adjunta YA (no espera
+  // a la IA para que se vea el avance) y en paralelo le pide a la IA que
+  // lo lea y complete los campos solos, sea que el formulario ya estuviera
+  // abierto (re-adjuntar) o que recién se esté por abrir.
+  async function procesarArchivo(f) {
+    if (!f) return;
+    setForm(prev => ({ ...(prev || baseForm(null)), archivo: f }));
+    setLeyendoIA(true);
+    const datos = await leerVoucherIA(f);
+    setLeyendoIA(false);
+    if (datos) setForm(prev => prev ? {
+      ...prev,
+      aerolinea: datos.aerolinea || prev.aerolinea,
+      numero: datos.numero || prev.numero,
+      fecha: datos.fecha || prev.fecha,
+      horaSalida: datos.horaSalida || prev.horaSalida,
+      horaLlegada: datos.horaLlegada || prev.horaLlegada,
+      origen: datos.origen || prev.origen,
+      destino: datos.destino || prev.destino,
+    } : prev);
+  }
   function onElegirVoucher(e) {
     const f = e.target.files?.[0]; e.target.value = "";
-    if (!f) return;
-    setForm(baseForm(f));   // el adjunto ya queda cargado; el resto se completa después, es opcional
+    procesarArchivo(f);
   }
   async function guardar() {
     if (!form.archivo && !form.aerolinea.trim() && !form.numero.trim()) { alert("Adjuntá el pasaje, o cargá al menos la aerolínea o el número de vuelo."); return; }
@@ -1109,7 +1153,8 @@ function VuelosGuardados({ viaje, actualizar, media }) {
         <input type="time" value={form.horaLlegada} onChange={e => setForm({ ...form, horaLlegada: e.target.value })} placeholder="Llega" style={{ ...IN, colorScheme: "dark" }} />
       </div>
       <button onClick={() => fileRef2.current?.click()} style={{ width: "100%", background: form.archivo ? "rgba(61,214,140,.1)" : T.card2, border: `1.5px dashed ${form.archivo ? T.ok : T.border}`, color: form.archivo ? T.ok : T.text, borderRadius: 10, padding: "11px", fontSize: 12, fontWeight: 700, cursor: "pointer", marginBottom: 9 }}><Ico n={form.archivo ? "check" : "cam"} s={14} c={form.archivo ? T.ok : T.accent} /> {form.archivo ? `Adjunto: ${form.archivo.name}` : "Adjuntar boarding pass / pasaje (foto o PDF)"}</button>
-      <input ref={fileRef2} type="file" accept="image/*,application/pdf" onChange={e => setForm({ ...form, archivo: e.target.files[0] || form.archivo })} style={{ display: "none" }} />
+      <input ref={fileRef2} type="file" accept="image/*,application/pdf" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) procesarArchivo(f); }} style={{ display: "none" }} />
+      {leyendoIA && <div style={{ fontSize: 11.5, color: T.accent, marginTop: -3, marginBottom: 9, display: "flex", alignItems: "center", gap: 6 }}><Ico n="varita" s={12} /> Leyendo el pasaje con IA…</div>}
       <div style={{ display: "flex", gap: 8 }}>
         <button onClick={() => setForm(null)} style={{ flex: 1, background: "none", border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "11px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Cancelar</button>
         <button onClick={guardar} style={{ flex: 2, background: T.accent, border: "none", color: "#1a1205", borderRadius: 9, padding: "11px", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>Guardar vuelo</button>
