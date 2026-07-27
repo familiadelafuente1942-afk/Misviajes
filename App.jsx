@@ -304,7 +304,7 @@ async function leerVoucherIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.36 · 26 jul 2026";
+const APP_VER = "v10.37 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -2514,11 +2514,60 @@ function NuevoVivido({ onCrear, cerrar }) {
 /* Pantalla de entrada: sin mail, sin contraseña. Un código que cada
    quien elige (o le pasan) separa los espacios. Si el código ya existe
    en ESTE teléfono, entra directo; si es nuevo, pide un nombre y lo crea. */
+/* La bienvenida: se muestra UNA vez, apenas se crea un código nuevo.
+   Mismos campos que "Mi estilo de viaje" en Ajustes — nada nuevo que
+   aprender, solo que ahora aparece antes de arrancar, no escondido. */
+function Bienvenida({ nombre, onListo }) {
+  const [cfgLocal, setCfgLocal] = useState({});
+  const [notas, setNotas] = useState("");
+  const chip = (activo) => ({ background: activo ? "rgba(232,163,61,.15)" : T.card2, border: `1px solid ${activo ? T.accent : T.border}`, color: activo ? T.accent : T.sub, borderRadius: 9, padding: "9px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" });
+  const set = (patch) => setCfgLocal(c => ({ ...c, ...patch }));
+
+  function terminar() { onListo({ ...cfgLocal, notas: notas.trim() }); }
+
+  return (<div style={{ minHeight: "100vh", background: T.bg, padding: 22, paddingTop: "max(22px, env(safe-area-inset-top))", paddingBottom: "max(22px, env(safe-area-inset-bottom))" }}>
+    <div style={{ marginBottom: 22 }}>
+      <div style={{ fontSize: 20, fontWeight: 800, color: T.text }}>¡Hola, {nombre}! 👋</div>
+      <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.55, marginTop: 6 }}>Antes de arrancar, contanos cómo les gusta viajar — cada vez que la IA arme un itinerario o sugiera algo, va a planificar COMO USTEDES. Un minuto y listo.</div>
+    </div>
+
+    <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 7 }}>¿Les gusta manejar?</div>
+    <div style={{ display: "flex", gap: 7, marginBottom: 18, flexWrap: "wrap" }}>
+      {[["ama", "Amamos la ruta"], ["justo", "Lo justo"], ["no", "Preferimos no manejar"]].map(([k, l]) => <button key={k} onClick={() => set({ manejo: k })} style={chip(cfgLocal.manejo === k)}>{l}</button>)}
+    </div>
+    <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 7 }}>Ritmo</div>
+    <div style={{ display: "flex", gap: 7, marginBottom: 18, flexWrap: "wrap" }}>
+      {[["relax", "🧉 Relajado"], ["mixto", "Mixto"], ["intenso", "⚡ Ver todo"]].map(([k, l]) => <button key={k} onClick={() => set({ ritmo: k })} style={chip(cfgLocal.ritmo === k)}>{l}</button>)}
+    </div>
+    <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 7 }}>Presupuesto</div>
+    <div style={{ display: "flex", gap: 7, marginBottom: 18, flexWrap: "wrap" }}>
+      {[["cuidado", "Cuidado"], ["medio", "Medio"], ["gustos", "Darnos los gustos"]].map(([k, l]) => <button key={k} onClick={() => set({ presupuesto: k })} style={chip(cfgLocal.presupuesto === k)}>{l}</button>)}
+    </div>
+    <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 7 }}>Lo que nos gusta</div>
+    <div style={{ display: "flex", gap: 7, marginBottom: 18, flexWrap: "wrap" }}>
+      {INTERESES.map(i => { const on = (cfgLocal.intereses || []).includes(i); return <button key={i} onClick={() => set({ intereses: on ? cfgLocal.intereses.filter(x => x !== i) : [...(cfgLocal.intereses || []), i] })} style={chip(on)}>{i}</button>; })}
+    </div>
+    <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 7 }}>Viajamos…</div>
+    <div style={{ display: "flex", gap: 7, marginBottom: 18, flexWrap: "wrap" }}>
+      {["En pareja", "En familia", "Con amigos", "Con mascota", "Solo/a"].map(c2 => <button key={c2} onClick={() => set({ compania: cfgLocal.compania === c2 ? "" : c2 })} style={chip(cfgLocal.compania === c2)}>{c2}</button>)}
+    </div>
+    <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 7 }}>Algo más que la IA deba saber (opcional)</div>
+    <textarea value={notas} onChange={e => setNotas(e.target.value)} rows={3} placeholder="Ej: paramos siempre en cabañas, evitamos peajes, viajamos con el perro…"
+      style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: T.text, outline: "none", fontFamily: "inherit", boxSizing: "border-box", marginBottom: 22 }} />
+
+    <button onClick={terminar} style={{ width: "100%", background: T.accent, border: "none", color: "#1a1205", borderRadius: T.rsm, padding: "16px", fontSize: 14.5, fontWeight: 800, cursor: "pointer", marginBottom: 10 }}>✓ Listo, arrancar</button>
+    <button onClick={() => onListo({})} style={{ width: "100%", background: "none", border: "none", color: T.muted, fontSize: 12, cursor: "pointer", padding: 8 }}>Saltear por ahora (lo cargo después en Ajustes)</button>
+  </div>);
+}
+
 function SelectorPerfil({ onEntrar }) {
   const [codigo, setCodigo] = useState("");
   const [nombreNuevo, setNombreNuevo] = useState("");
   const [creando, setCreando] = useState(false);
+  const [nuevo, setNuevo] = useState(null);   // {codigo, nombre} de un perfil recién creado -> pasa por Bienvenida
   const conocidos = listarPerfiles();
+
+  if (nuevo) return <Bienvenida nombre={nuevo.nombre} onListo={(cfgNueva) => { guardarCfgLS(cfgNueva); onEntrar(nuevo.codigo); }} />;
 
   function intentar() {
     const c = limpiarCodigo(codigo);
@@ -2531,8 +2580,8 @@ function SelectorPerfil({ onEntrar }) {
     const c = limpiarCodigo(codigo);
     if (!nombreNuevo.trim()) { alert("Poné un nombre para este perfil."); return; }
     crearPerfil(c, nombreNuevo);
-    entrarPerfil(c);
-    onEntrar(c);
+    entrarPerfil(c);   // ya queda activo, así lo que cargue la Bienvenida se guarda en ESTE perfil
+    setNuevo({ codigo: c, nombre: nombreNuevo.trim() });   // perfil nuevo -> pasa por la bienvenida antes de entrar
   }
 
   return (<div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", justifyContent: "center", padding: 24 }}>
