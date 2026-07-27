@@ -319,7 +319,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.48 · 26 jul 2026";
+const APP_VER = "v10.49 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -2460,9 +2460,28 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
 
 /* La tarjeta de cada viaje respira: pasa las fotos de ESE viaje en un
    fundido suave. Abrís la app y los recuerdos te salen a buscar. */
+const _cacheFotoDestino = {};   // en memoria: no repetir la búsqueda de la misma ciudad dos veces
+async function fotoDestino(lugar) {
+  const termino = (lugar || "").split(",")[0].trim();
+  if (!termino) return null;
+  if (termino in _cacheFotoDestino) return _cacheFotoDestino[termino];
+  try {
+    const rBusca = await fetch(`https://es.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(termino)}&format=json&origin=*&srlimit=1`);
+    const jBusca = await rBusca.json();
+    const titulo = jBusca?.query?.search?.[0]?.title;
+    if (!titulo) { _cacheFotoDestino[termino] = null; return null; }
+    const rResumen = await fetch(`https://es.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(titulo)}`);
+    const jResumen = await rResumen.json();
+    const url = jResumen?.originalimage?.source || jResumen?.thumbnail?.source || null;
+    _cacheFotoDestino[termino] = url;
+    return url;
+  } catch { return null; }
+}
+
 function CardViaje({ v, onAbrir, onBorrar }) {
   const [fotos, setFotos] = useState([]);
   const [idx, setIdx] = useState(0);
+  const [fotoLugar, setFotoLugar] = useState(null);   // foto automática del destino, cuando todavía no hay fotos propias
   useEffect(() => {
     let urls = [];
     mediaListar(v.id).then(ms => {
@@ -2477,16 +2496,26 @@ function CardViaje({ v, onAbrir, onBorrar }) {
     return () => clearInterval(t);
   }, [fotos.length]);
   const o = v.puntos?.[0]?.nombre?.split(",")[0]; const d = v.puntos?.length > 1 ? v.puntos[v.puntos.length - 1].nombre.split(",")[0] : null;
+  useEffect(() => {
+    if (fotos.length > 0) { setFotoLugar(null); return; }   // ya hay fotos propias: no hace falta la del destino
+    const lugar = v.puntos?.length ? v.puntos[v.puntos.length - 1].nombre : v.nombre;
+    let vivo = true;
+    fotoDestino(lugar).then(u => { if (vivo) setFotoLugar(u); });
+    return () => { vivo = false; };
+  }, [fotos.length, v.puntos?.length, v.nombre]);
   const nEnt = (v.bitacora || []).length;
-  return (<div onClick={onAbrir} style={{ position: "relative", borderRadius: T.r, overflow: "hidden", border: `1px solid ${T.border}`, marginBottom: 11, cursor: "pointer", minHeight: fotos.length ? 150 : 76, background: T.card }}>
-    {fotos.map((u, i) => <div key={i} style={{ position: "absolute", inset: 0, backgroundImage: `url(${u})`, backgroundSize: "cover", backgroundPosition: "center", opacity: i === idx ? 1 : 0, transition: "opacity 1.4s ease" }} />)}
-    {fotos.length > 0 && <div style={{ position: "absolute", inset: 0, background: "linear-gradient(rgba(14,17,22,.1) 30%, rgba(14,17,22,.85))" }} />}
-    <div style={{ position: "relative", padding: "15px 16px", display: "flex", alignItems: "flex-end", minHeight: fotos.length ? 150 : 76, boxSizing: "border-box" }}>
+  const hayFondo = fotos.length > 0 || !!fotoLugar;
+  return (<div onClick={onAbrir} style={{ position: "relative", borderRadius: T.r, overflow: "hidden", border: `1px solid ${T.border}`, marginBottom: 11, cursor: "pointer", minHeight: hayFondo ? 150 : 76, background: T.card }}>
+    {fotos.length > 0
+      ? fotos.map((u, i) => <div key={i} style={{ position: "absolute", inset: 0, backgroundImage: `url(${u})`, backgroundSize: "cover", backgroundPosition: "center", opacity: i === idx ? 1 : 0, transition: "opacity 1.4s ease" }} />)
+      : fotoLugar && <div style={{ position: "absolute", inset: 0, backgroundImage: `url(${fotoLugar})`, backgroundSize: "cover", backgroundPosition: "center" }} />}
+    {hayFondo && <div style={{ position: "absolute", inset: 0, background: "linear-gradient(rgba(14,17,22,.1) 30%, rgba(14,17,22,.85))" }} />}
+    <div style={{ position: "relative", padding: "15px 16px", display: "flex", alignItems: "flex-end", minHeight: hayFondo ? 150 : 76, boxSizing: "border-box" }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 16, fontWeight: 800, color: "#fff", textShadow: fotos.length ? "0 1px 6px rgba(0,0,0,.6)" : "none" }}>{v.nombre}</div>
-        <div style={{ fontSize: 11.5, color: fotos.length ? "rgba(255,255,255,.85)" : T.sub, marginTop: 2, textShadow: fotos.length ? "0 1px 4px rgba(0,0,0,.6)" : "none" }}>{v.vivido ? "Viaje vivido" : (o && d ? `${o} → ${d}` : o ? `Desde ${o}` : "Sin recorrido aún")}{v.fechaInicio ? ` · ${v.vivido ? fFecha(v.fechaInicio) : "sale " + fFecha(v.fechaInicio)}` : ""}{nEnt ? ` · ${nEnt} recuerdo${nEnt > 1 ? "s" : ""}` : ""}</div>
+        <div style={{ fontSize: 16, fontWeight: 800, color: hayFondo ? "#fff" : T.text, textShadow: hayFondo ? "0 1px 6px rgba(0,0,0,.6)" : "none" }}>{v.nombre}</div>
+        <div style={{ fontSize: 11.5, color: hayFondo ? "rgba(255,255,255,.85)" : T.sub, marginTop: 2, textShadow: hayFondo ? "0 1px 4px rgba(0,0,0,.6)" : "none" }}>{v.vivido ? "Viaje vivido" : (o && d ? `${o} → ${d}` : o ? `Desde ${o}` : "Sin recorrido aún")}{v.fechaInicio ? ` · ${v.vivido ? fFecha(v.fechaInicio) : "sale " + fFecha(v.fechaInicio)}` : ""}{nEnt ? ` · ${nEnt} recuerdo${nEnt > 1 ? "s" : ""}` : ""}</div>
       </div>
-      <button onClick={(e) => { e.stopPropagation(); onBorrar(); }} style={{ background: "rgba(0,0,0,.35)", border: "none", color: "rgba(255,255,255,.8)", borderRadius: 9, cursor: "pointer", padding: "7px 8px" }}><Ico n="tacho" s={15} /></button>
+      <button onClick={(e) => { e.stopPropagation(); onBorrar(); }} style={{ background: hayFondo ? "rgba(0,0,0,.35)" : "none", border: "none", color: hayFondo ? "rgba(255,255,255,.8)" : T.muted, borderRadius: 9, cursor: "pointer", padding: "7px 8px" }}><Ico n="tacho" s={15} /></button>
     </div>
   </div>);
 }
