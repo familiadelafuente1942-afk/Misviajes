@@ -319,7 +319,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.45 · 26 jul 2026";
+const APP_VER = "v10.47 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -786,9 +786,14 @@ function MediaGrande({ m, tam = 160, items, index = 0 }) {
   const [abierto, setAbierto] = useState(false);
   const [indiceActual, setIndiceActual] = useState(index);
   const [urlGrande, setUrlGrande] = useState(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const lista = items && items.length ? items : [m];        // sin "items" (llamadas viejas), se comporta como antes: una sola
   const actual = lista[indiceActual] || m;
-  const touchX = useRef(null);
+  const toqueInicio = useRef(null);   // { x, y, t } de dónde y cuándo arrancó el toque de 1 dedo
+  const pinch = useRef(null);      // { dist, zoom } al arrancar un pellizco de 2 dedos
+  const arrastre = useRef(null);   // { x, y, panX, panY } al arrancar un arrastre con zoom
+  const ultimoToque = useRef(0);   // para detectar el doble toque
 
   useEffect(() => { const u = URL.createObjectURL(m.blob); setUrl(u); return () => URL.revokeObjectURL(u); }, [m.id]);
   useEffect(() => {
@@ -796,14 +801,47 @@ function MediaGrande({ m, tam = 160, items, index = 0 }) {
     const u = URL.createObjectURL(actual.blob); setUrlGrande(u);
     return () => URL.revokeObjectURL(u);
   }, [abierto, actual.id]);
+  useEffect(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, [indiceActual, abierto]);   // cada foto nueva arranca sin zoom
 
   function abrir() { setIndiceActual(index); setAbierto(true); }
   function anterior(e) { e.stopPropagation(); setIndiceActual(i => Math.max(0, i - 1)); }
   function siguiente(e) { e.stopPropagation(); setIndiceActual(i => Math.min(lista.length - 1, i + 1)); }
-  function onTouchStart(e) { touchX.current = e.touches[0].clientX; }
+  const distanciaDedos = (t1, t2) => Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+
+  function onTouchStart(e) {
+    if (e.touches.length === 2) { pinch.current = { dist: distanciaDedos(e.touches[0], e.touches[1]), zoom }; return; }
+    if (e.touches.length !== 1) return;
+    toqueInicio.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
+    if (zoom > 1) arrastre.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, panX: pan.x, panY: pan.y };
+  }
+  function onTouchMove(e) {
+    if (e.touches.length === 2 && pinch.current) {
+      const d = distanciaDedos(e.touches[0], e.touches[1]);
+      setZoom(Math.min(4, Math.max(1, pinch.current.zoom * (d / pinch.current.dist))));
+    } else if (e.touches.length === 1 && arrastre.current && zoom > 1) {
+      setPan({ x: arrastre.current.panX + (e.touches[0].clientX - arrastre.current.x), y: arrastre.current.panY + (e.touches[0].clientY - arrastre.current.y) });
+    }
+  }
   function onTouchEnd(e) {
-    if (touchX.current == null) return;
-    const dx = e.changedTouches[0].clientX - touchX.current; touchX.current = null;
+    pinch.current = null;
+    const eraArrastre = !!arrastre.current; arrastre.current = null;
+    if (zoom <= 1.05 && zoom !== 1) { setZoom(1); setPan({ x: 0, y: 0 }); }
+
+    const inicio = toqueInicio.current; toqueInicio.current = null;
+    if (!inicio || !e.changedTouches?.length) return;
+    const fin = e.changedTouches[0];
+    const movimiento = Math.hypot(fin.clientX - inicio.x, fin.clientY - inicio.y);
+    const esToque = movimiento < 12 && Date.now() - inicio.t < 400;   // se movió poco y fue rápido -> toque, no deslizamiento
+
+    if (esToque) {
+      const ahora = Date.now();
+      if (ahora - ultimoToque.current < 300) { ultimoToque.current = 0; setZoom(z => z > 1 ? 1 : 2.5); setPan({ x: 0, y: 0 }); }
+      else ultimoToque.current = ahora;
+      return;
+    }
+    ultimoToque.current = 0;   // un deslizamiento cancela cualquier doble-toque a medio armar
+    if (zoom > 1 || eraArrastre) return;   // con zoom activo, deslizar mueve la imagen, no cambia de foto
+    const dx = fin.clientX - inicio.x;
     if (Math.abs(dx) < 40) return;
     if (dx < 0) setIndiceActual(i => Math.min(lista.length - 1, i + 1));   // deslizó a la izquierda -> siguiente
     else setIndiceActual(i => Math.max(0, i - 1));                         // a la derecha -> anterior
@@ -826,14 +864,15 @@ function MediaGrande({ m, tam = 160, items, index = 0 }) {
         </div>
       </div>}
     </div>
-    {abierto && urlGrande && <div onClick={() => setAbierto(false)} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,.96)", display: "flex", alignItems: "center", justifyContent: "center", padding: "max(50px, env(safe-area-inset-top) + 34px) 16px max(24px, env(safe-area-inset-bottom))" }}>
+    {abierto && urlGrande && <div onClick={() => zoom <= 1 && setAbierto(false)} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,.96)", display: "flex", alignItems: "center", justifyContent: "center", padding: "max(50px, env(safe-area-inset-top) + 34px) 16px max(24px, env(safe-area-inset-bottom))", touchAction: "none", overflow: "hidden" }}>
       <button onClick={() => setAbierto(false)} style={{ position: "absolute", top: "max(14px, env(safe-area-inset-top))", right: 16, background: "rgba(255,255,255,.14)", border: "none", color: "#fff", borderRadius: "50%", width: 38, height: 38, cursor: "pointer", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center" }}><Ico n="cerrar" s={16} /></button>
       {lista.length > 1 && <div style={{ position: "absolute", top: "max(14px, env(safe-area-inset-top))", left: 16, background: "rgba(255,255,255,.14)", color: "#fff", borderRadius: 20, padding: "9px 14px", fontSize: 12, fontWeight: 700, zIndex: 2 }}>{indiceActual + 1} / {lista.length}</div>}
       {lista.length > 1 && indiceActual > 0 && <button onClick={anterior} style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,.14)", border: "none", color: "#fff", borderRadius: "50%", width: 40, height: 40, cursor: "pointer", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>‹</button>}
       {lista.length > 1 && indiceActual < lista.length - 1 && <button onClick={siguiente} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,.14)", border: "none", color: "#fff", borderRadius: "50%", width: 40, height: 40, cursor: "pointer", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>›</button>}
       {actual.tipo === "video"
         ? <video key={actual.id} src={urlGrande} controls autoPlay playsInline onClick={e => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8 }} />
-        : <img key={actual.id} src={urlGrande} onClick={e => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }} />}
+        : <img key={actual.id} src={urlGrande} onClick={e => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8, transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transition: pinch.current || arrastre.current ? "none" : "transform .15s ease-out", touchAction: "none" }} />}
+      {zoom > 1 && <div style={{ position: "absolute", bottom: "max(20px, env(safe-area-inset-bottom))", left: "50%", transform: "translateX(-50%)", background: "rgba(255,255,255,.14)", color: "#fff", borderRadius: 20, padding: "6px 13px", fontSize: 11, fontWeight: 700, zIndex: 2 }}>{Math.round(zoom * 100)}% · doble toque para volver</div>}
     </div>}
   </>);
 }
