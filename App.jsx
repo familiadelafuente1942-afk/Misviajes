@@ -269,7 +269,7 @@ async function dondeEstoy() {
 const extraerJSON = (t) => { const m = t.match(/\[[\s\S]*\]/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.22 · 26 jul 2026";
+const APP_VER = "v10.23 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1098,7 +1098,7 @@ function ReservasTab({ viaje, actualizar, media }) {
   // ── Vuelos: modo auto/avión + región elegida ──
   const puntoElegido = !otro.trim() ? puntos.find(p => p.nombre.split(",")[0] === lugarSel) : null;
   const regionSugerida = puntoElegido && /argentina/i.test(puntoElegido.nombre) ? "argentina" : "sudamerica";
-  const [modo, setModo] = useState("auto");        // "auto" o "avion"
+  const [modo, setModo] = useState(viaje.modoViaje === "avion" ? "avion" : "auto");   // arranca en el modo elegido al crear el viaje
   const [region, setRegion] = useState(regionSugerida);
   const [origenVuelo, setOrigenVuelo] = useState(puntos[0]?.nombre?.split(",")[0] || "");
   // si el lugar elegido tiene fechas en el itinerario, van al enlace
@@ -1140,13 +1140,21 @@ function ReservasTab({ viaje, actualizar, media }) {
   return (<div>
     <VuelosGuardados viaje={viaje} actualizar={actualizar} media={media} />
 
+    {/* Viaje recién creado, sin destino todavía: buscador con geocode real,
+        que además suma el punto al viaje (así Clima, mapa y bitácora
+        tienen dónde anclarse más adelante). */}
+    {puntos.length === 0 && <div style={{ background: T.card, border: `1px solid ${T.accent}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 14 }}>
+      <div style={{ fontSize: 13, fontWeight: 800, color: T.text, marginBottom: 8 }}>✈️ ¿A dónde vuelan?</div>
+      <BuscarLugar placeholder="Bariloche, Roma, donde sea…" onElegir={(r) => { actualizar({ ...viaje, puntos: [...(viaje.puntos || []), r] }); setLugarSel(r.nombre.split(",")[0]); }} />
+    </div>}
+
     {/* dónde */}
-    <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>¿Para dónde?</div>
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+    {puntos.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>¿Para dónde?</div>}
+    {puntos.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
       {puntos.map((p, i) => { const n = p.nombre.split(",")[0]; const on = !otro && lugarSel === n; return <button key={i} onClick={() => { setLugarSel(n); setOtro(""); }} style={{ background: on ? "rgba(232,163,61,.15)" : T.card, border: `1px solid ${on ? T.accent : T.border}`, color: on ? T.accent : T.sub, borderRadius: 9, padding: "9px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{n}</button>; })}
-    </div>
-    <input value={otro} onChange={e => setOtro(e.target.value)} placeholder="U otro lugar…"
-      style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: T.text, outline: "none", boxSizing: "border-box", marginBottom: 6 }} />
+    </div>}
+    {puntos.length > 0 && <input value={otro} onChange={e => setOtro(e.target.value)} placeholder="U otro lugar…"
+      style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: T.text, outline: "none", boxSizing: "border-box", marginBottom: 6 }} />}
     {f && lugar && <div style={{ fontSize: 11.5, color: T.sub, marginBottom: 12 }}>Los enlaces van con fechas: <b style={{ color: T.text }}>{fFecha(f.in)} → {fFecha(f.out)}</b></div>}
     {!f && <div style={{ height: 8 }} />}
 
@@ -1646,7 +1654,7 @@ function ClimaTab({ viaje, onResumen }) {
 /* ═══ PANTALLA DE UN VIAJE (pestañas: Ruta / Bitácora / Clip) ════ */
 function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
   const perfil = perfilTexto(cfg);
-  const [tab, setTab] = useState(viaje.vivido ? "bitacora" : "ruta");
+  const [tab, setTab] = useState(viaje.vivido ? "bitacora" : (viaje.modoViaje === "avion" ? "reservas" : "ruta"));
   const [ruta, setRuta] = useState(null);
   const [calc, setCalc] = useState(false);
   const [err, setErr] = useState("");
@@ -2197,6 +2205,7 @@ function MisViajesApp({ onSalir }) {
   const [viajeId, setViajeId] = useState(null);
   const [ajustes, setAjustes] = useState(false);
   const [vivido, setVivido] = useState(false);
+  const [eligiendoModo, setEligiendoModo] = useState(false);
   const guardar = (d) => { setData(d); guardarLS(d); };
   const guardarCfg = (c) => { setCfg(c); guardarCfgLS(c); };
   // El ícono muestra los días que faltan para el próximo viaje (hasta 60 días antes).
@@ -2213,10 +2222,11 @@ function MisViajesApp({ onSalir }) {
     actualizar={(v) => guardar({ ...data, viajes: data.viajes.map(x => x.id === v.id ? v : x) })}
     volver={() => setViajeId(null)} /></Fondo>;
 
-  function nuevoViaje() {
-    const v = { id: uid(), nombre: "Nuevo viaje", creado: Date.now(), puntos: [], sugerencias: [], bitacora: [], fechaInicio: "", diasVacaciones: "" };
+  function nuevoViaje(modo) {
+    const v = { id: uid(), nombre: "Nuevo viaje", creado: Date.now(), modoViaje: modo, puntos: [], sugerencias: [], bitacora: [], fechaInicio: "", diasVacaciones: "" };
     guardar({ ...data, viajes: [v, ...(data.viajes || [])] });
     setViajeId(v.id);
+    setEligiendoModo(false);
   }
 
   async function borrarViaje(v) {
@@ -2240,8 +2250,16 @@ function MisViajesApp({ onSalir }) {
       <GlobitoPermiso />
       <ChatIdeas cfg={cfg} viajes={data.viajes || []} />
       {vivido && <NuevoVivido cerrar={() => setVivido(false)} onCrear={(v2) => { guardar({ ...data, viajes: [v2, ...data.viajes] }); setVivido(false); setViajeId(v2.id); }} />}
+      {eligiendoModo && <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={() => setEligiendoModo(false)}>
+        <div onClick={e => e.stopPropagation()} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: 22, width: "100%", maxWidth: 340 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: T.text, textAlign: "center", marginBottom: 4 }}>¿Cómo van a viajar?</div>
+          <div style={{ fontSize: 12, color: T.sub, textAlign: "center", lineHeight: 1.5, marginBottom: 18 }}>Si es en auto, arrancamos con el mapa y la ruta.<br />Si es en avión, vamos directo a buscar el pasaje.</div>
+          <button onClick={() => nuevoViaje("auto")} style={{ width: "100%", background: T.accent, border: "none", color: "#1a1205", borderRadius: T.rsm, padding: "16px", fontSize: 14.5, fontWeight: 800, cursor: "pointer", marginBottom: 10 }}>🚗 En auto</button>
+          <button onClick={() => nuevoViaje("avion")} style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: T.rsm, padding: "16px", fontSize: 14.5, fontWeight: 800, cursor: "pointer" }}>✈️ En avión</button>
+        </div>
+      </div>}
       <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
-        <button onClick={nuevoViaje} style={{ flex: 1, background: T.accent, border: "none", color: "#1a1205", borderRadius: T.r, padding: "16px 10px", fontSize: 14, fontWeight: 800, cursor: "pointer" }}><Ico n="mas" s={16} /> Viaje nuevo</button>
+        <button onClick={() => setEligiendoModo(true)} style={{ flex: 1, background: T.accent, border: "none", color: "#1a1205", borderRadius: T.r, padding: "16px 10px", fontSize: 14, fontWeight: 800, cursor: "pointer" }}><Ico n="mas" s={16} /> Viaje nuevo</button>
         <button onClick={() => setVivido(true)} style={{ flex: 1, background: T.card, border: `1px solid ${T.accent}`, color: T.accent, borderRadius: T.r, padding: "16px 10px", fontSize: 14, fontWeight: 800, cursor: "pointer" }}><Ico n="reloj" s={16} /> Ya vivido</button>
       </div>
       {(data.viajes || []).length === 0 && <div style={{ textAlign: "center", color: T.muted, fontSize: 13, padding: "30px 20px", lineHeight: 1.6 }}>Todavía no hay viajes.<br />Buenos Aires → Salta te está esperando.</div>}
