@@ -304,7 +304,7 @@ async function leerVoucherIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.38 · 26 jul 2026";
+const APP_VER = "v10.39 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -331,7 +331,13 @@ function UpdateBanner({ seguro = false }) {
     let vivo = true;
     const chequear = async () => {
       if (!(await hayVersionNueva()) || !vivo) return;
-      let auto = seguro || (Date.now() - _abiertaEn < 6000 && (() => { try { return sessionStorage.getItem("viajes_autoupd") !== "1"; } catch { return true; } })());
+      let yaAutoActualizo = false;
+      try { yaAutoActualizo = sessionStorage.getItem("viajes_autoupd") === "1"; } catch { }
+      // el reload silencioso pasa COMO MÁXIMO UNA VEZ por sesión (sea por
+      // estar en el inicio, sea por los primeros 6s) — si ya se intentó y
+      // la diferencia sigue ahí (CDN con propagación lenta, por ejemplo),
+      // no insiste solo: pasa al aviso chico para que decidas vos.
+      let auto = !yaAutoActualizo && (seguro || Date.now() - _abiertaEn < 6000);
       if (auto) { try { sessionStorage.setItem("viajes_autoupd", "1"); } catch { } window.location.replace(window.location.pathname + "?u=" + Date.now()); return; }
       setHay(true);
     };
