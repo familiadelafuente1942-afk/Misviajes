@@ -304,7 +304,7 @@ async function leerVoucherIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.33 · 26 jul 2026";
+const APP_VER = "v10.34 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -425,6 +425,7 @@ function Ico({ n, s = 16, c = "currentColor" }) {
     regla: "M3 17L17 3l4 4L7 21zM13 7l2 2M9 11l2 2",
     museo: "M3 21h18M4 21V10L12 4l8 6v11M9 21v-6h6v6",
     tarjeta: "M3 6h18v12H3zM3 10h18M7 15h4",
+    sendero: "M6 20c2-6-2-8 0-14M13 20c2-6-2-8 0-14M4 4l2 2M15 4l2 2M9 20h9",
   };
   return (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, verticalAlign: "-2px" }}><path d={P[n] || ""} /></svg>);
 }
@@ -972,8 +973,8 @@ function DelLugarTab({ viaje, perfil, actualizar }) {
     setArmando(true);
     try {
       const destinos = viaje.puntos.map(p => p.nombre.split(",").slice(0, 2).join(",")).join(" · ");
-      const sys = "Sos un guía cultural y gastronómico experto, con conocimiento profundo de la música y la cocina de cada región del mundo. Respondés SOLO con JSON válido, sin texto adicional ni markdown.";
-      const prompt = `${perfil ? `Así viaja esta gente: ${perfil}\n\n` : ""}Este es su recorrido: ${destinos}\n\nArmá la guía de COMIDAS TÍPICAS y MÚSICA de cada región del recorrido (agrupá paradas cercanas en la misma región; máximo 4 regiones). Comidas: los platos imperdibles con qué son y dónde/cómo probarlos de verdad (mercados, peñas, parajes — no cadenas). Música: el género de la región, 3-4 artistas emblemáticos (clásicos y actuales) y 2-3 canciones que son LA banda sonora de ese lugar.\n\nRespondé SOLO este JSON:\n{"regiones":[{"nombre":"Quebrada de Humahuaca","comidas":[{"plato":"...","desc":"qué es, 1 frase","donde":"dónde probarlo"}],"genero":"...","artistas":[{"nombre":"...","desc":"1 frase de por qué escucharlo"}],"canciones":["Tema — Artista"]}]}`;
+      const sys = "Sos un guía cultural, gastronómico y de trekking experto, con conocimiento profundo de cada región del mundo. Respondés SOLO con JSON válido, sin texto adicional ni markdown.";
+      const prompt = `${perfil ? `Así viaja esta gente: ${perfil}\n\n` : ""}Este es su recorrido: ${destinos}\n\nArmá la guía de COMIDAS TÍPICAS, MÚSICA, y RUTAS/CAMINOS EMBLEMÁTICOS de cada región del recorrido (agrupá paradas cercanas en la misma región; máximo 4 regiones). Comidas: los platos imperdibles con qué son y dónde/cómo probarlos de verdad (mercados, peñas, parajes — no cadenas). Música: el género de la región, 3-4 artistas emblemáticos (clásicos y actuales) y 2-3 canciones que son LA banda sonora de ese lugar. Rutas: si el lugar tiene caminos, senderos o peregrinaciones famosas (ej: si es Santiago de Compostela, los distintos Caminos de Santiago que llegan ahí — Francés, Portugués, del Norte, Inglés, Primitivo, cada uno con su recorrido típico; si es Cusco, el Camino Inca; si es la Patagonia, el W Trek; etc.) — nombrá cada ruta con de dónde a dónde va, cuántos días toma en general, y la dificultad. Si el lugar no tiene ninguna ruta o camino famoso, dejá la lista vacía — no inventes una si no existe de verdad.\n\nRespondé SOLO este JSON:\n{"regiones":[{"nombre":"Quebrada de Humahuaca","comidas":[{"plato":"...","desc":"qué es, 1 frase","donde":"dónde probarlo"}],"genero":"...","artistas":[{"nombre":"...","desc":"1 frase de por qué escucharlo"}],"canciones":["Tema — Artista"],"rutas":[{"nombre":"Camino Francés","recorrido":"de dónde a dónde","dias":"cuántos días toma","dificultad":"fácil/media/difícil"}]}]}`;
       const resp = await llamarIA([{ role: "user", content: prompt }], sys, 3000);
       const m = resp.match(/\{[\s\S]*\}/);
       const plan = m ? JSON.parse(m[0]) : null;
@@ -1004,6 +1005,15 @@ function DelLugarTab({ viaje, perfil, actualizar }) {
             <div style={{ fontSize: 13.5, fontWeight: 800, color: T.text }}>{c2.plato}</div>
             <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.5, marginTop: 1 }}>{c2.desc}</div>
             {c2.donde && <div onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(c2.donde + " " + r.nombre)}`, "_blank")} style={{ fontSize: 11.5, color: T.accent, marginTop: 4, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(232,163,61,.1)", border: `1px solid ${T.accent}`, borderRadius: 8, padding: "5px 9px" }}><Ico n="gmaps" s={12} c={T.accent} /> {c2.donde}</div>}
+          </div>))}
+        </>}
+
+        {(r.rutas || []).length > 0 && <>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".07em", margin: "12px 0 7px", display: "flex", alignItems: "center", gap: 5 }}><Ico n="sendero" s={11} /> Rutas y caminos</div>
+          {r.rutas.map((rt, ri) => (<div key={ri} style={{ marginBottom: 9, paddingLeft: 10, borderLeft: `2px solid ${T.border}` }}>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: T.text }}>{rt.nombre}</div>
+            {rt.recorrido && <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.5, marginTop: 1 }}>{rt.recorrido}</div>}
+            <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>{rt.dias ? `${rt.dias}` : ""}{rt.dias && rt.dificultad ? " · " : ""}{rt.dificultad ? `dificultad ${rt.dificultad}` : ""}</div>
           </div>))}
         </>}
 
@@ -1333,6 +1343,14 @@ function VuelosGuardados({ viaje, actualizar, media, cfg }) {
           <button onClick={() => borrar(v2.id)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="tacho" s={13} /></button>
         </div>
       </div>
+      {v2.destino && (() => {
+        const vuelta = vuelos.find(x => x.id !== v2.id && x.fecha && (x.origen || "").toLowerCase().includes((v2.destino || "").toLowerCase().split(",")[0].trim()));
+        const f = v2.fecha && vuelta ? { in: v2.fecha, out: vuelta.fecha } : null;   // solo con las dos fechas se pasan; si no, sin fechas (mejor vacío que "undefined" en la URL)
+        return (<div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: T.text, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><Ico n="cama" s={12} /> Dormir en {v2.destino}</div>
+          <HospedajeLinks lugar={v2.destino} f={f} />
+        </div>);
+      })()}
       <PanelHorarioVuelo viaje={viaje} vuelo={v2} actualizar={actualizar} cfg={cfg} />
     </div>))}
 
@@ -1393,7 +1411,7 @@ function ReservasTab({ viaje, actualizar, media, cfg }) {
     ["cama:Dormir", [
       ["Booking", "#003580", `https://www.booking.com/searchresults.es.html?ss=${q}${f ? `&checkin=${f.in}&checkout=${f.out}` : ""}&group_adults=2`],
       ["Airbnb", "#FF385C", `https://www.airbnb.com.ar/s/${q}/homes?adults=2${f ? `&checkin=${f.in}&checkout=${f.out}` : ""}`],
-      ["Despegar", "#4A148C", `https://www.despegar.com.ar/hoteles/`],
+      ["Despegar", "#4A148C", `https://www.google.com/search?q=${encodeURIComponent("site:despegar.com.ar hoteles " + lugar)}`],
       ["Hostels", "#F26722", `https://www.spanish.hostelworld.com/s?q=${q}${f ? `&from=${f.in}&to=${f.out}` : ""}`],
     ]],
     ["auto:Alquilar auto", [
@@ -1461,7 +1479,7 @@ function ReservasTab({ viaje, actualizar, media, cfg }) {
       <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>Buscadores</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
         {[["Google Flights", "#4285F4", `https://www.google.com/travel/flights?q=${encodeURIComponent(`vuelos ${origenVuelo ? "de " + origenVuelo + " " : ""}a ${lugar}` + (f ? " el " + f.in : ""))}`],
-          ["Despegar Vuelos", "#4A148C", `https://www.despegar.com.ar/vuelos/`],
+          ["Despegar Vuelos", "#4A148C", `https://www.google.com/search?q=${encodeURIComponent("site:despegar.com.ar vuelos a " + lugar)}`],
           ["Kayak", "#FF690F", `https://www.kayak.com.ar/flights`]]
           .map(([nom, color, url]) => <button key={nom} onClick={() => abrir(url)} style={{ background: color, border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{nom}</button>)}
       </div>
@@ -1713,7 +1731,7 @@ function HospedajeLinks({ lugar, f }) {
   return (<div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
     {btn("#003580", "#fff", "Booking", `https://www.booking.com/searchresults.es.html?ss=${q}${fechasB}&group_adults=2`)}
     {btn("#FF385C", "#fff", "Airbnb", `https://www.airbnb.com.ar/s/${q}/homes?adults=2${fechasA}`)}
-    {btn("#4A148C", "#fff", "Despegar", `https://www.despegar.com.ar/hoteles/`)}
+    {btn("#4A148C", "#fff", "Despegar", `https://www.google.com/search?q=${encodeURIComponent("site:despegar.com.ar hoteles " + lugar)}`)}
     <button onClick={() => abrir(`https://www.google.com/search?q=${encodeURIComponent("turismo oficial " + lugar + " qué visitar")}`)} style={{ background: T.card2, border: "none", color: T.sub, borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}><Ico n="museo" s={13} /> Turismo oficial</button>
   </div>);
 }
