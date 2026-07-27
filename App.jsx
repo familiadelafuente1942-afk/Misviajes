@@ -304,7 +304,7 @@ async function leerVoucherIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.29 · 26 jul 2026";
+const APP_VER = "v10.31 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1067,6 +1067,52 @@ const AEROLINEAS_POR_REGION = {
     ["Turkish Airlines", "#C50034", "https://www.turkishairlines.com/es-ar/"],
   ]},
 };
+/* El corazón del cálculo: a partir del vuelo (fecha/hora/aeropuerto) y del
+   perfil (Mi Casa), decide de dónde salen, cuánto tardan al aeropuerto, y
+   a qué hora hay que salir de casa. Devuelve null si falta algún dato
+   (sin fecha/hora del vuelo, sin GPS ni Mi Casa, sin poder geolocalizar
+   el aeropuerto) — en ese caso, se completa a mano desde el panel. */
+async function calcularHorarioVuelo(vuelo, cfg) {
+  // Paso 1, resiliente por su cuenta: ¿de dónde salen? No depende de nada
+  // más — si el resto falla más abajo, esto igual queda guardado.
+  let origen = vuelo.origenCasa || null;
+  let origenNota = "";
+  if (!origen) {
+    if (cfg?.casa) {
+      try {
+        const aca = await dondeEstoy();
+        const cerca = distM([aca.lat, aca.lon], [cfg.casa.lat, cfg.casa.lon]) < 1500;
+        origen = cerca ? cfg.casa : aca;
+        origenNota = cerca ? "Están en casa — se usó esa dirección." : "No están en casa ahora — se usó su ubicación actual.";
+      } catch { origen = cfg.casa; origenNota = "No pude confirmar dónde están — se usó la dirección de casa."; }
+    } else return null;   // ni Mi Casa guardada ni de dónde partir: no hay nada para decidir solo
+  }
+  const patchOrigen = { origenCasa: origen, origenNota };
+  if (!vuelo.fecha || !vuelo.horaSalida) return patchOrigen;   // sabemos de dónde salen, falta cuándo
+
+  // Paso 2, puede fallar sin arruinar el paso 1: geolocalizar el aeropuerto.
+  let aero;
+  try { const res = await geocodificar(vuelo.aeropuertoOrigen || `Aeropuerto ${vuelo.origen}`); aero = res && res[0]; } catch { aero = null; }
+  if (!aero) return patchOrigen;
+
+  // Paso 3, la ruta real: si no hay señal o falla OSRM, nos quedamos
+  // con el origen igual — no se pierde lo que sí se pudo saber.
+  let ruta;
+  try { ruta = await calcularRuta([origen, aero]); } catch { ruta = null; }
+  if (!ruta) return patchOrigen;
+
+  const anticipacionMin = vuelo.internacional ? 180 : 120, margenMin = 15;
+  const minutosViaje = Math.ceil(ruta.dur / 60);
+  const salidaVuelo = new Date(`${vuelo.fecha}T${vuelo.horaSalida}:00`);
+  const fechaSalir = new Date(salidaVuelo.getTime() - (minutosViaje + anticipacionMin + margenMin) * 60000);
+  return {
+    ...patchOrigen,
+    aeropuertoNombre: aero.nombre, aeropuertoLat: aero.lat, aeropuertoLon: aero.lon,
+    distAeropuertoM: ruta.dist, duracionAeropuertoS: ruta.dur, minutosViajeAeropuerto: minutosViaje,
+    horaSalirCasa: `${pad2(fechaSalir.getHours())}:${pad2(fechaSalir.getMinutes())}`,
+  };
+}
+
 function actualizarVuelo(viaje, vueloId, patch) {
   return { ...viaje, vuelos: (viaje.vuelos || []).map(v2 => v2.id === vueloId ? { ...v2, ...patch } : v2) };
 }
@@ -1077,70 +1123,50 @@ function PanelHorarioVuelo({ viaje, vuelo, actualizar, cfg }) {
   const [abierto, setAbierto] = useState(false);
   const [buscando, setBuscando] = useState(false);
   const [calculando, setCalculando] = useState(false);
-  const [ruta, setRuta] = useState(null);
-  const [aeropuerto, setAeropuerto] = useState(null);
   const [error, setError] = useState("");
   const [buscarDir, setBuscarDir] = useState(false);
+  const [decisionTxt, setDecisionTxt] = useState(vuelo.origenNota || "");
   const origenCasa = vuelo.origenCasa || null;
   const internacional = !!vuelo.internacional;
-  const [decidiendo, setDecidiendo] = useState(false);
-  const [decisionTxt, setDecisionTxt] = useState("");
+  // Ya calculado (al guardar el vuelo, o en una vuelta anterior) -> se lee
+  // directo, sin recalcular ni preguntar nada de nuevo.
+  const yaCalculado = !!(vuelo.horaSalirCasa && vuelo.aeropuertoLat);
+  const horaSalirTxt = vuelo.horaSalirCasa || null;
+  const minutosViaje = vuelo.minutosViajeAeropuerto || null;
+  const distAeropuerto = vuelo.distAeropuertoM || null;
+  const aeropuertoNombre = vuelo.aeropuertoNombre || null;
+  const anticipacionMin = internacional ? 180 : 120;
 
   async function usarGPS() {
     setBuscando(true);
-    try { const l = await dondeEstoy(); actualizar(actualizarVuelo(viaje, vuelo.id, { origenCasa: l })); setRuta(null); }
+    try { const l = await dondeEstoy(); actualizar(actualizarVuelo(viaje, vuelo.id, { origenCasa: l, horaSalirCasa: null })); setDecisionTxt(""); }
     catch (e) { alert(e.message); }
     setBuscando(false);
   }
 
-  // La decisión sola: si guardaron "Mi casa" y este vuelo todavía no tiene
-  // de dónde salir, se fija el GPS del momento. ¿Están cerca de casa? Usan
-  // casa. ¿Están en otro lado? Usan dónde están de verdad — sin preguntar.
-  async function decidirOrigenSolo() {
-    if (!cfg?.casa || origenCasa) return;
-    setDecidiendo(true);
-    try {
-      const aca = await dondeEstoy();
-      const cerca = distM([aca.lat, aca.lon], [cfg.casa.lat, cfg.casa.lon]) < 1500;   // ~1,5 km = "estás en casa"
-      if (cerca) { actualizar(actualizarVuelo(viaje, vuelo.id, { origenCasa: cfg.casa })); setDecisionTxt("Están en casa — se usó esa dirección."); }
-      else { actualizar(actualizarVuelo(viaje, vuelo.id, { origenCasa: aca })); setDecisionTxt("No están en casa ahora — se usó su ubicación actual."); }
-    } catch {
-      // sin GPS disponible: mejor tirar con la casa que preguntar
-      actualizar(actualizarVuelo(viaje, vuelo.id, { origenCasa: cfg.casa }));
-      setDecisionTxt("No pude confirmar dónde están — se usó la dirección de casa.");
-    }
-    setDecidiendo(false);
-  }
-  useEffect(() => { if (abierto) decidirOrigenSolo(); }, [abierto]);   // se resuelve solo al abrir el panel, sin preguntar nada
-  async function calcular() {
-    if (!origenCasa) { alert("Decime desde dónde salen: GPS o buscá la dirección."); return; }
-    if (!vuelo.fecha || !vuelo.horaSalida) { alert("A este vuelo le falta la fecha o la hora de salida — completala arriba primero."); return; }
+  // Solo entra en juego si TODAVÍA no hay nada calculado (vuelos viejos,
+  // o el cálculo automático no pudo cerrar en su momento).
+  useEffect(() => { if (abierto && !yaCalculado && !origenCasa && cfg?.casa) recalcular(); }, [abierto]);
+
+  async function recalcular() {
+    if (!vuelo.fecha || !vuelo.horaSalida) { setError("A este vuelo le falta la fecha o la hora de salida — completala arriba primero."); return; }
     setCalculando(true); setError("");
     try {
-      const query = vuelo.aeropuertoOrigen || `Aeropuerto ${vuelo.origen}`;
-      const res = await geocodificar(query);
-      const aero = res && res[0];
-      if (!aero) { setError("No encontré el aeropuerto solo. Escribí el nombre exacto en \"Aeropuerto\" arriba del vuelo y probá de nuevo."); setCalculando(false); return; }
-      setAeropuerto(aero);
-      const r = await calcularRuta([origenCasa, aero]);
-      if (!r) { setError("No pude calcular una ruta en auto hasta ahí."); setCalculando(false); return; }
-      setRuta(r);
-    } catch { setError("No pude calcular la ruta. Revisá la conexión y probá de nuevo."); }
+      const patch = await calcularHorarioVuelo(vuelo, cfg);
+      if (!patch) { setError(origenCasa ? "No pude calcular la ruta hasta el aeropuerto. Revisá la conexión." : "Decime desde dónde salen: GPS o buscá la dirección."); setCalculando(false); return; }
+      actualizar(actualizarVuelo(viaje, vuelo.id, patch));
+      setDecisionTxt(patch.origenNota || "");
+    } catch { setError("No pude calcular la ruta. Probá de nuevo."); }
     setCalculando(false);
   }
 
-  const anticipacionMin = internacional ? 180 : 120;
-  const margenMin = 15;
-  let horaSalirTxt = null, fechaSalir = null, minutosViaje = null;
-  if (ruta && vuelo.fecha && vuelo.horaSalida) {
-    minutosViaje = Math.ceil(ruta.dur / 60);
-    const salidaVuelo = new Date(`${vuelo.fecha}T${vuelo.horaSalida}:00`);
-    fechaSalir = new Date(salidaVuelo.getTime() - (minutosViaje + anticipacionMin + margenMin) * 60000);
-    horaSalirTxt = `${pad2(fechaSalir.getHours())}:${pad2(fechaSalir.getMinutes())}`;
-  }
-
   function descargarRecordatorio() {
-    if (!fechaSalir) return;
+    if (!horaSalirTxt || minutosViaje == null) return;
+    // La misma cuenta que calculó calcularHorarioVuelo: vuelo menos (viaje +
+    // anticipación + margen). Recalcularla así (no reparseando el HH:MM)
+    // hace que cruzar la medianoche hacia atrás quede bien solo.
+    const salidaVuelo = new Date(`${vuelo.fecha}T${vuelo.horaSalida}:00`);
+    const fechaSalir = new Date(salidaVuelo.getTime() - (minutosViaje + anticipacionMin + 15) * 60000);
     const fin = new Date(fechaSalir.getTime() + 15 * 60000);
     const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mis Viajes//ES", "BEGIN:VEVENT",
       `UID:${uid()}@misviajes`, `DTSTAMP:${fechaICS(new Date())}`, `DTSTART:${fechaICS(fechaSalir)}`, `DTEND:${fechaICS(fin)}`,
@@ -1155,42 +1181,63 @@ function PanelHorarioVuelo({ viaje, vuelo, actualizar, cfg }) {
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
 
+  // Navegación real: abre Apple/Google Maps con la ruta CASA → AEROPUERTO
+  // ya cargada, con el tráfico en vivo que maneja el propio Mapa del
+  // teléfono — no tratamos de reinventar eso, lo hace mejor la app nativa.
+  function navegarAeropuerto(app) {
+    if (!origenCasa || !vuelo.aeropuertoLat) return;
+    const o = origenCasa, d = { lat: vuelo.aeropuertoLat, lon: vuelo.aeropuertoLon };
+    const url = app === "apple"
+      ? `https://maps.apple.com/?saddr=${o.lat},${o.lon}&daddr=${d.lat},${d.lon}&dirflg=d`
+      : `https://www.google.com/maps/dir/?api=1&origin=${o.lat},${o.lon}&destination=${d.lat},${d.lon}&travelmode=driving`;
+    window.open(url, "_blank");
+  }
+
   return (<div style={{ marginTop: 8 }}>
     <button onClick={() => setAbierto(v2 => !v2)} style={{ width: "100%", background: horaSalirTxt ? "rgba(61,214,140,.08)" : T.card2, border: `1px solid ${horaSalirTxt ? T.ok : T.border}`, color: horaSalirTxt ? T.ok : T.sub, borderRadius: 9, padding: "8px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
       <Ico n="reloj" s={12} /> {horaSalirTxt ? `Salir de casa a las ${horaSalirTxt}` : "¿A qué hora salgo de casa?"}
     </button>
     {abierto && <div style={{ background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: 12, marginTop: 7 }}>
-      <div style={{ fontSize: 10.5, color: T.sub, marginBottom: 8 }}>¿Desde dónde salen hacia el aeropuerto?</div>
-      {decidiendo && <div style={{ fontSize: 11.5, color: T.accent, marginBottom: 9, display: "flex", alignItems: "center", gap: 6 }}><Ico n="pin" s={12} /> Viendo si están en casa…</div>}
-      {origenCasa ? <div style={{ marginBottom: 9 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(232,163,61,.1)", border: `1px solid ${T.accent}`, borderRadius: 9, padding: "8px 10px" }}>
-          <Ico n="pin" s={13} c={T.accent} />
-          <span style={{ flex: 1, fontSize: 12, color: T.text, fontWeight: 700 }}>{origenCasa.nombre.split(",").slice(0, 2).join(",")}</span>
-          <button onClick={() => { actualizar(actualizarVuelo(viaje, vuelo.id, { origenCasa: null })); setRuta(null); setDecisionTxt(""); }} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="cerrar" s={10} /></button>
-        </div>
-        {decisionTxt && <div style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>{decisionTxt} · <span onClick={decidirOrigenSolo} style={{ color: T.accent, cursor: "pointer", textDecoration: "underline" }}>actualizar</span></div>}
-      </div> : <div style={{ display: "flex", gap: 6, marginBottom: 9 }}>
-        <button onClick={usarGPS} disabled={buscando} style={{ flex: 1, background: T.card, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "9px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}><Ico n="pin" s={12} /> {buscando ? "Buscando…" : "Usar mi ubicación"}</button>
-        <button onClick={() => setBuscarDir(v2 => !v2)} style={{ flex: 1, background: T.card, border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "9px", fontSize: 11.5, cursor: "pointer" }}>Otra dirección</button>
+      {calculando && <div style={{ fontSize: 11.5, color: T.accent, marginBottom: 9, display: "flex", alignItems: "center", gap: 6 }}><Ico n="pin" s={12} /> Calculando la ruta al aeropuerto…</div>}
+
+      {horaSalirTxt && <div style={{ background: "rgba(61,214,140,.08)", border: `1px solid ${T.ok}`, borderRadius: 9, padding: "10px 11px", marginBottom: 10 }}>
+        <div style={{ fontSize: 17, fontWeight: 800, color: T.ok }}>Salir a las {horaSalirTxt}</div>
+        <div style={{ fontSize: 10.5, color: T.sub, marginTop: 3, lineHeight: 1.5 }}>{aeropuertoNombre?.split(",").slice(0, 2).join(",")} está a ~{kmFmt(distAeropuerto)} · {minutosViaje} min manejando + {anticipacionMin / 60} h de anticipación del vuelo + 15 min de margen.</div>
+        {origenCasa && <div style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>Desde: {origenCasa.nombre.split(",").slice(0, 2).join(",")}{decisionTxt ? ` — ${decisionTxt}` : ""}</div>}
       </div>}
-      {!cfg?.casa && !origenCasa && <div style={{ fontSize: 10, color: T.muted, marginBottom: 9, lineHeight: 1.4 }}>Tip: guardá "Mi casa" en ⚙ Ajustes y esto se completa solo la próxima vez.</div>}
-      {buscarDir && !origenCasa && <div style={{ marginBottom: 9 }}><BuscarLugar placeholder="Dirección de salida…" onElegir={(r) => { actualizar(actualizarVuelo(viaje, vuelo.id, { origenCasa: r })); setBuscarDir(false); setRuta(null); }} /></div>}
 
-      <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, color: T.sub, marginBottom: 10, cursor: "pointer" }}>
-        <input type="checkbox" checked={internacional} onChange={e => { actualizar(actualizarVuelo(viaje, vuelo.id, { internacional: e.target.checked })); setRuta(null); }} />
-        Vuelo internacional (3 h de anticipación en vez de 2 h)
-      </label>
+      {!horaSalirTxt && <>
+        <div style={{ fontSize: 10.5, color: T.sub, marginBottom: 8 }}>¿Desde dónde salen hacia el aeropuerto?</div>
+        {origenCasa ? <div style={{ marginBottom: 9 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(232,163,61,.1)", border: `1px solid ${T.accent}`, borderRadius: 9, padding: "8px 10px" }}>
+            <Ico n="pin" s={13} c={T.accent} />
+            <span style={{ flex: 1, fontSize: 12, color: T.text, fontWeight: 700 }}>{origenCasa.nombre.split(",").slice(0, 2).join(",")}</span>
+            <button onClick={() => { actualizar(actualizarVuelo(viaje, vuelo.id, { origenCasa: null })); setDecisionTxt(""); }} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="cerrar" s={10} /></button>
+          </div>
+        </div> : <div style={{ display: "flex", gap: 6, marginBottom: 9 }}>
+          <button onClick={usarGPS} disabled={buscando} style={{ flex: 1, background: T.card, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "9px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}><Ico n="pin" s={12} /> {buscando ? "Buscando…" : "Usar mi ubicación"}</button>
+          <button onClick={() => setBuscarDir(v2 => !v2)} style={{ flex: 1, background: T.card, border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "9px", fontSize: 11.5, cursor: "pointer" }}>Otra dirección</button>
+        </div>}
+        {!cfg?.casa && !origenCasa && <div style={{ fontSize: 10, color: T.muted, marginBottom: 9, lineHeight: 1.4 }}>Tip: guardá "Mi casa" en ⚙ Ajustes y esto se completa solo la próxima vez.</div>}
+        {buscarDir && !origenCasa && <div style={{ marginBottom: 9 }}><BuscarLugar placeholder="Dirección de salida…" onElegir={(r) => { actualizar(actualizarVuelo(viaje, vuelo.id, { origenCasa: r })); setBuscarDir(false); }} /></div>}
 
-      <button onClick={calcular} disabled={calculando || !origenCasa} style={{ width: "100%", background: calculando ? T.card : T.accent, border: "none", color: calculando ? T.sub : "#1a1205", borderRadius: 9, padding: "10px", fontSize: 12, fontWeight: 800, cursor: "pointer", marginBottom: 8 }}>{calculando ? "Calculando…" : "Calcular"}</button>
-      {error && <div style={{ fontSize: 11, color: T.danger, marginBottom: 8 }}>{error}</div>}
+        <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, color: T.sub, marginBottom: 10, cursor: "pointer" }}>
+          <input type="checkbox" checked={internacional} onChange={e => actualizar(actualizarVuelo(viaje, vuelo.id, { internacional: e.target.checked }))} />
+          Vuelo internacional (3 h de anticipación en vez de 2 h)
+        </label>
+
+        <button onClick={recalcular} disabled={calculando || !origenCasa} style={{ width: "100%", background: calculando ? T.card : T.accent, border: "none", color: calculando ? T.sub : "#1a1205", borderRadius: 9, padding: "10px", fontSize: 12, fontWeight: 800, cursor: "pointer", marginBottom: 8 }}>{calculando ? "Calculando…" : "Calcular"}</button>
+        {error && <div style={{ fontSize: 11, color: T.danger, marginBottom: 8 }}>{error}</div>}
+      </>}
 
       {horaSalirTxt && <>
-        <div style={{ background: "rgba(61,214,140,.08)", border: `1px solid ${T.ok}`, borderRadius: 9, padding: "10px 11px", marginBottom: 9 }}>
-          <div style={{ fontSize: 17, fontWeight: 800, color: T.ok }}>Salir a las {horaSalirTxt}</div>
-          <div style={{ fontSize: 10.5, color: T.sub, marginTop: 3, lineHeight: 1.5 }}>{aeropuerto?.nombre?.split(",").slice(0, 2).join(",")} está a ~{kmFmt(ruta.dist)} · {minutosViaje} min manejando + {anticipacionMin / 60} h de anticipación del vuelo + 15 min de margen.</div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+          <button onClick={() => navegarAeropuerto("apple")} style={{ flex: 1, background: T.card, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "10px 6px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}><Ico n="auto" s={13} /> Apple Maps</button>
+          <button onClick={() => navegarAeropuerto("google")} style={{ flex: 1, background: T.card, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "10px 6px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}><Ico n="gmaps" s={13} c={T.accent2} /> Google Maps</button>
         </div>
         <button onClick={descargarRecordatorio} style={{ width: "100%", background: T.accent, border: "none", color: "#1a1205", borderRadius: 9, padding: "11px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}><Ico n="alerta" s={13} /> Agregar recordatorio con alarma</button>
-        <div style={{ fontSize: 10, color: T.muted, marginTop: 6, lineHeight: 1.4 }}>Se agrega al Calendario del teléfono, con alarma. Suena aunque la app esté cerrada — lo maneja el propio iPhone.</div>
+        <div style={{ fontSize: 10, color: T.muted, marginTop: 6, lineHeight: 1.4 }}>El recordatorio suena aunque la app esté cerrada — lo maneja el Calendario del propio iPhone. Los botones de Maps arrancan la navegación con el tráfico en vivo del momento.</div>
+        <button onClick={recalcular} disabled={calculando} style={{ width: "100%", background: "none", border: "none", color: T.muted, fontSize: 10.5, cursor: "pointer", padding: "8px 0 0" }}>{calculando ? "Recalculando…" : "↻ Recalcular"}</button>
       </>}
     </div>}
   </div>);
@@ -1237,6 +1284,7 @@ function VuelosGuardados({ viaje, actualizar, media, cfg }) {
     const f = e.target.files?.[0]; e.target.value = "";
     procesarArchivo(f);
   }
+  const [guardandoExtra, setGuardandoExtra] = useState(false);
   async function guardar() {
     if (!form.archivo && !form.aerolinea.trim() && !form.numero.trim()) { alert("Adjuntá el pasaje, o cargá al menos la aerolínea o el número de vuelo."); return; }
     let docId = null;
@@ -1247,7 +1295,10 @@ function VuelosGuardados({ viaje, actualizar, media, cfg }) {
       try { await mediaGuardar({ id: docId, viajeId: viaje.id, tipo: esPdf ? "documento" : "foto", blob, nombre: f.name, ts: Date.now() }); }
       catch { docId = null; alert("No pude guardar el archivo adjunto (¿sin espacio en el teléfono?)."); }
     }
-    const vuelo = { id: uid(), aerolinea: form.aerolinea.trim(), numero: form.numero.trim().toUpperCase(), fecha: form.fecha, horaSalida: form.horaSalida, horaLlegada: form.horaLlegada, origen: form.origen.trim(), destino: form.destino.trim(), aeropuertoOrigen: (form.aeropuertoOrigen || "").trim(), docId };
+    let vuelo = { id: uid(), aerolinea: form.aerolinea.trim(), numero: form.numero.trim().toUpperCase(), fecha: form.fecha, horaSalida: form.horaSalida, horaLlegada: form.horaLlegada, origen: form.origen.trim(), destino: form.destino.trim(), aeropuertoOrigen: (form.aeropuertoOrigen || "").trim(), docId };
+    setGuardandoExtra(true);
+    try { const patch = await calcularHorarioVuelo(vuelo, cfg); if (patch) vuelo = { ...vuelo, ...patch }; } catch { }
+    setGuardandoExtra(false);
     actualizar({ ...viaje, vuelos: [...vuelos, vuelo] });
     setForm(null);
   }
@@ -1303,7 +1354,7 @@ function VuelosGuardados({ viaje, actualizar, media, cfg }) {
       {leyendoIA && <div style={{ fontSize: 11.5, color: T.accent, marginTop: -3, marginBottom: 9, display: "flex", alignItems: "center", gap: 6 }}><Ico n="varita" s={12} /> Leyendo el pasaje con IA…</div>}
       <div style={{ display: "flex", gap: 8 }}>
         <button onClick={() => setForm(null)} style={{ flex: 1, background: "none", border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "11px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Cancelar</button>
-        <button onClick={guardar} style={{ flex: 2, background: T.accent, border: "none", color: "#1a1205", borderRadius: 9, padding: "11px", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>Guardar vuelo</button>
+        <button onClick={guardar} disabled={guardandoExtra} style={{ flex: 2, background: guardandoExtra ? T.card2 : T.accent, border: "none", color: guardandoExtra ? T.sub : "#1a1205", borderRadius: 9, padding: "11px", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>{guardandoExtra ? "Calculando la ruta al aeropuerto…" : "Guardar vuelo"}</button>
       </div>
     </div>}
   </div>);
