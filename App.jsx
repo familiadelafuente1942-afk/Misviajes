@@ -319,7 +319,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.49 · 26 jul 2026";
+const APP_VER = "v10.51 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1645,6 +1645,7 @@ function ReservasTab({ viaje, actualizar, media, cfg }) {
   const puntos = viaje.puntos || [];
   const fp = fechasParada(viaje);
   const [lugarSel, setLugarSel] = useState(puntos.length ? puntos[puntos.length - 1].nombre.split(",")[0] : "");
+  useEffect(() => { if (puntos.length > 0 && !lugarSel) setLugarSel(puntos[puntos.length - 1].nombre.split(",")[0]); }, [puntos.length]);   // apenas el cuadro único arma el viaje, el destino se selecciona solo
   const [otro, setOtro] = useState("");
   const lugar = otro.trim() || lugarSel;
   // ── Vuelos: modo auto/avión + región elegida ──
@@ -1652,7 +1653,7 @@ function ReservasTab({ viaje, actualizar, media, cfg }) {
   const regionSugerida = puntoElegido && /argentina/i.test(puntoElegido.nombre) ? "argentina" : "sudamerica";
   const [modo, setModo] = useState(viaje.modoViaje === "avion" ? "avion" : "auto");   // arranca en el modo elegido al crear el viaje
   const [region, setRegion] = useState(regionSugerida);
-  const [origenVuelo, setOrigenVuelo] = useState(puntos[0]?.nombre?.split(",")[0] || "");
+  const [origenVuelo, setOrigenVuelo] = useState((viaje.origenViaje || cfg?.casa?.nombre || puntos[0]?.nombre || "").split(",")[0]);
   // si el lugar elegido tiene fechas en el itinerario, van al enlace
   const f = Object.entries(fp).find(([n]) => n.toLowerCase().includes(lugar.toLowerCase()))?.[1]
     || (viaje.fechaInicio && viaje.diasVacaciones ? { in: viaje.fechaInicio, out: (() => { const d = new Date(viaje.fechaInicio + "T12:00:00"); d.setDate(d.getDate() + Number(viaje.diasVacaciones)); return d.toISOString().slice(0, 10); })() } : null);
@@ -1693,14 +1694,6 @@ function ReservasTab({ viaje, actualizar, media, cfg }) {
     <VuelosGuardados viaje={viaje} actualizar={actualizar} media={media} cfg={cfg} />
     <ReservasGuardadas viaje={viaje} actualizar={actualizar} media={media} />
 
-    {/* Viaje recién creado, sin destino todavía: buscador con geocode real,
-        que además suma el punto al viaje (así Clima, mapa y bitácora
-        tienen dónde anclarse más adelante). */}
-    {puntos.length === 0 && <div style={{ background: T.card, border: `1px solid ${T.accent}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 14 }}>
-      <div style={{ fontSize: 13, fontWeight: 800, color: T.text, marginBottom: 8, display: "flex", alignItems: "center", gap: 7 }}><Ico n="avion" s={15} c={T.accent} /> ¿A dónde vuelan?</div>
-      <BuscarLugar placeholder="Bariloche, Roma, donde sea…" onElegir={(r) => { actualizar({ ...viaje, puntos: [...(viaje.puntos || []), r] }); setLugarSel(r.nombre.split(",")[0]); }} />
-    </div>}
-
     {/* dónde */}
     {puntos.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>¿Para dónde?</div>}
     {puntos.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
@@ -1731,7 +1724,7 @@ function ReservasTab({ viaje, actualizar, media, cfg }) {
 
       <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>Buscadores</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
-        {[["Google Flights", "#4285F4", `https://www.google.com/travel/flights?q=${encodeURIComponent(`vuelos ${origenVuelo ? "de " + origenVuelo + " " : ""}a ${lugar}` + (f ? " el " + f.in : ""))}`],
+        {[["Google Flights", "#4285F4", `https://www.google.com/travel/flights?q=${encodeURIComponent(`vuelos ${origenVuelo ? "de " + origenVuelo + " " : ""}a ${lugar}` + (f?.in && f?.out ? ` del ${f.in} al ${f.out}` : f?.in ? " el " + f.in : ""))}`],
           ["Despegar Vuelos", "#4A148C", `https://www.google.com/search?q=${encodeURIComponent("site:despegar.com.ar paquetes a " + lugar)}`],
           ["Kayak", "#FF690F", `https://www.kayak.com.ar/flights`]]
           .map(([nom, color, url]) => <button key={nom} onClick={() => abrir(url)} style={{ background: color, border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{nom}</button>)}
@@ -1993,10 +1986,12 @@ function HospedajeLinks({ lugar, f }) {
    Le decís a dónde, desde dónde y cuántos días. La IA lee tu perfil viajero
    (¿aman manejar? ¿ritmo relajado? ¿pueblitos y vino?) y arma el itinerario
    que USTEDES harían: las paradas caen al mapa listas, con sus porqués. */
-function PlannerIA({ viaje, actualizar, perfil, cfg }) {
+function PlannerIA({ viaje, actualizar, perfil, cfg, onManual }) {
   const [destino, setDestino] = useState("");
   const [desde, setDesde] = useState(cfg?.casa?.nombre || "Buenos Aires, Argentina");
-  const [dias, setDias] = useState(viaje.diasVacaciones || "14");
+  const [fechaIda, setFechaIda] = useState(viaje.fechaInicio || "");
+  const [fechaVuelta, setFechaVuelta] = useState(viaje.fechaInicio && viaje.diasVacaciones ? isoMasDiasSimple(viaje.fechaInicio, Number(viaje.diasVacaciones) - 1) : "");
+  const dias = fechaIda && fechaVuelta ? Math.max(1, diasEntre(fechaIda, fechaVuelta) + 1) : "14";   // se calcula solo de las dos fechas — nunca se pide como número suelto
   const [armando, setArmando] = useState(false);
   const [cambiarDesde, setCambiarDesde] = useState(!cfg?.casa);   // si hay Mi Casa, arranca sin pedir nada
 
@@ -2005,7 +2000,7 @@ function PlannerIA({ viaje, actualizar, perfil, cfg }) {
     setArmando(true);
     try {
       const sys = "Sos un planificador de viajes de primer nivel, con conocimiento profundo del mundo. Respondés SOLO con JSON válido, sin texto adicional ni markdown.";
-      const prompt = `${perfil ? `ASÍ VIAJA ESTA GENTE (armá el itinerario exactamente para ellos): ${perfil}\n\n` : ""}Quieren viajar a: ${destino}\nSalen desde: ${desde}\nDías disponibles: ${dias}\n\nANTES de armar nada, pensá: ¿qué es lo que hace FAMOSO a este destino — lo principal, lo que nadie que va ahí se puede perder? Ejemplos de cómo pensarlo: Egipto → las pirámides de Giza y el Nilo. Mendoza → la Ruta del Vino y las bodegas. Santiago de Compostela → el Camino de Santiago. Cusco → Machu Picchu y el Camino Inca. Orlando → los parques Disney. Alemania, según la ciudad → historia (Berlín: el Muro; Múnich: la Oktoberfest). Si esa atracción central es EN SÍ un recorrido de varios días (un camino de peregrinación, una ruta del vino, la Ruta 40), las paradas del itinerario tienen que ser LAS ETAPAS de ese recorrido — pueblos y tramos en orden — no una ciudad genérica con noches sueltas. Si es un sitio puntual (pirámides, un parque, una torre), asegurate de que al menos una parada esté dedicada explícitamente a eso, con el "por_que" explicando por qué es lo imperdible. Armá el MEJOR itinerario posible para ellos: el orden de lugares, cuántas noches en cada uno, y por qué cada lugar es para ELLOS. Si aman manejar, roadtrip con rutas lindas; si no, ciudades base y traslados cómodos. Si el destino requiere avión desde el origen, la primera parada es la ciudad de llegada.\n\nRespondé SOLO este JSON:\n{"nombre_viaje":"...","atraccion_principal":"1 frase: lo imperdible de este viaje y por qué armamos el recorrido así","paradas":[{"nombre":"Ciudad o lugar","pais_o_provincia":"...","noches":2,"por_que":"1 frase pensada para ellos, conectada con lo imperdible del lugar","lat":-00.0000,"lon":-00.0000}]}`;
+      const prompt = `${perfil ? `ASÍ VIAJA ESTA GENTE (armá el itinerario exactamente para ellos): ${perfil}\n\n` : ""}Quieren viajar a: ${destino}\nSalen desde: ${desde}\nSalen el ${fechaIda || "(sin definir)"} y vuelven el ${fechaVuelta || "(sin definir)"} — ${dias} días en total.\n\nANTES de armar nada, pensá: ¿qué es lo que hace FAMOSO a este destino — lo principal, lo que nadie que va ahí se puede perder? Ejemplos de cómo pensarlo: Egipto → las pirámides de Giza y el Nilo. Mendoza → la Ruta del Vino y las bodegas. Santiago de Compostela → el Camino de Santiago. Cusco → Machu Picchu y el Camino Inca. Orlando → los parques Disney. Alemania, según la ciudad → historia (Berlín: el Muro; Múnich: la Oktoberfest). Si esa atracción central es EN SÍ un recorrido de varios días (un camino de peregrinación, una ruta del vino, la Ruta 40), las paradas del itinerario tienen que ser LAS ETAPAS de ese recorrido — pueblos y tramos en orden — no una ciudad genérica con noches sueltas. Si es un sitio puntual (pirámides, un parque, una torre), asegurate de que al menos una parada esté dedicada explícitamente a eso, con el "por_que" explicando por qué es lo imperdible. Armá el MEJOR itinerario posible para ellos: el orden de lugares, cuántas noches en cada uno, y por qué cada lugar es para ELLOS. Si aman manejar, roadtrip con rutas lindas; si no, ciudades base y traslados cómodos. Si el destino requiere avión desde el origen, la primera parada es la ciudad de llegada.\n\nRespondé SOLO este JSON:\n{"nombre_viaje":"...","atraccion_principal":"1 frase: lo imperdible de este viaje y por qué armamos el recorrido así","paradas":[{"nombre":"Ciudad o lugar","pais_o_provincia":"...","noches":2,"por_que":"1 frase pensada para ellos, conectada con lo imperdible del lugar","lat":-00.0000,"lon":-00.0000}]}`;
       const resp = await llamarIA([{ role: "user", content: prompt }], sys, 3000);
       const m = resp.match(/\{[\s\S]*\}/);
       const plan = m ? JSON.parse(m[0]) : null;
@@ -2017,7 +2012,10 @@ function PlannerIA({ viaje, actualizar, perfil, cfg }) {
         puntos: ps,
         itinerario: plan.paradas.map(p => ({ nombre: p.nombre, noches: p.noches, por_que: p.por_que })),
         atraccionPrincipal: plan.atraccion_principal || "",
-        diasVacaciones: viaje.diasVacaciones || dias,
+        fechaInicio: fechaIda || viaje.fechaInicio,
+        fechaVuelta: fechaVuelta || viaje.fechaVuelta,
+        diasVacaciones: String(dias) || viaje.diasVacaciones,
+        origenViaje: desde || viaje.origenViaje,
       });
     } catch (e) { alert(e.message); }
     setArmando(false);
@@ -2026,18 +2024,26 @@ function PlannerIA({ viaje, actualizar, perfil, cfg }) {
   return (<div style={{ background: "linear-gradient(135deg, rgba(232,163,61,.12), rgba(77,163,255,.07))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: 16, marginBottom: 16 }}>
     <div style={{ fontSize: 15, fontWeight: 800, color: T.text, marginBottom: 3 }}><Ico n="varita" s={17} c={T.accent} /> ¿A dónde quieren ir?</div>
     <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.55, marginBottom: 12 }}>{perfil ? "La IA ya sabe cómo viajan ustedes. Decile el destino y arma el itinerario a su medida." : "Tip: cargá su estilo de viaje en Ajustes ⚙ y el itinerario sale hecho para ustedes."}</div>
-    <input value={destino} onChange={e => setDestino(e.target.value)} placeholder="Italia · Jujuy · Costa de Brasil · donde sea"
-      style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "13px 14px", fontSize: 14.5, color: T.text, outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
-    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-      {cambiarDesde ? <input value={desde} onChange={e => setDesde(e.target.value)} placeholder="¿Desde dónde salen?"
-        style={{ flex: 1, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: T.text, outline: "none", minWidth: 0 }} />
-        : <div onClick={() => setCambiarDesde(true)} style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "0 12px", fontSize: 12.5, color: T.sub, cursor: "pointer", minWidth: 0 }}>
-          <Ico n="pin" s={12} c={T.accent} /> <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Salen desde {desde.split(",")[0]}</span>
-        </div>}
-      <input value={dias} onChange={e => setDias(e.target.value)} inputMode="numeric" placeholder="días"
-        style={{ width: 70, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px", fontSize: 13, color: T.text, outline: "none", textAlign: "center" }} />
+    <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 10, color: T.sub, marginBottom: 3 }}>Ida</div>
+        <input type="date" value={fechaIda} onChange={e => setFechaIda(e.target.value)} style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 10px", fontSize: 12.5, color: T.text, outline: "none", colorScheme: "dark", boxSizing: "border-box" }} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 10, color: T.sub, marginBottom: 3 }}>Vuelta</div>
+        <input type="date" value={fechaVuelta} min={fechaIda || undefined} onChange={e => setFechaVuelta(e.target.value)} style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 10px", fontSize: 12.5, color: T.text, outline: "none", colorScheme: "dark", boxSizing: "border-box" }} />
+      </div>
     </div>
-    <button onClick={armar} disabled={armando} style={{ width: "100%", background: armando ? T.card2 : T.accent, border: "none", color: armando ? T.sub : "#1a1205", borderRadius: T.rsm, padding: "14px", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>{armando ? "Armando su itinerario…" : <><Ico n="varita" s={13} /> Armar el itinerario para nosotros</>}</button>
+    {fechaIda && fechaVuelta && <div style={{ fontSize: 10.5, color: T.accent, marginBottom: 8 }}>{dias} día{dias == 1 ? "" : "s"} de viaje</div>}
+    <input value={destino} onChange={e => setDestino(e.target.value)} placeholder="¿A dónde van? Italia · Jujuy · donde sea"
+      style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "13px 14px", fontSize: 14.5, color: T.text, outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
+    {cambiarDesde ? <input value={desde} onChange={e => setDesde(e.target.value)} placeholder="¿Desde dónde salen?"
+      style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: T.text, outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
+      : <div onClick={() => setCambiarDesde(true)} style={{ display: "flex", alignItems: "center", gap: 6, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 12.5, color: T.sub, cursor: "pointer", marginBottom: 10 }}>
+        <Ico n="pin" s={12} c={T.accent} /> <span>Salen desde {desde.split(",")[0]}</span>
+      </div>}
+    <button onClick={armar} disabled={armando} style={{ width: "100%", background: armando ? T.card2 : T.accent, border: "none", color: armando ? T.sub : "#1a1205", borderRadius: T.rsm, padding: "14px", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>{armando ? "Armando su itinerario…" : <><Ico n="varita" s={13} /> Armar el viaje</>}</button>
+    {onManual && <button onClick={onManual} style={{ width: "100%", background: "none", border: "none", color: T.muted, fontSize: 11.5, cursor: "pointer", padding: "9px 0 0" }}>o armarlo a mano, punto por punto</button>}
   </div>);
 }
 
@@ -2240,7 +2246,8 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
   const chatEndRef = useRef(null);
   const [climaResumen, setClimaResumen] = useState("");
   const [puntoAbierto, setPuntoAbierto] = useState(null);   // qué parada tiene el detalle desplegado
-  const [plannerAbierto, setPlannerAbierto] = useState(false);   // pedirle a la IA el viaje completo, aunque ya haya puntos
+  const [plannerAbierto, setPlannerAbierto] = useState(false);
+  const [modoManualInicial, setModoManualInicial] = useState(false);   // "armarlo a mano" desde el cuadro único   // pedirle a la IA el viaje completo, aunque ya haya puntos
 
   const puntos = viaje.puntos || [];
   const sugerencias = viaje.sugerencias || [];
@@ -2338,15 +2345,15 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
 
     <div style={{ padding: 16 }}>
       <UpdateBanner />
-      <BarraViaje viaje={viaje} actualizar={actualizar} />
+      {!(puntos.length === 0 && !modoManualInicial) && <BarraViaje viaje={viaje} actualizar={actualizar} />}
 
-      {tab === "ruta" && (puntos.length === 0 || plannerAbierto) && <PlannerIA viaje={viaje} actualizar={(v2) => { actualizar(v2); setPlannerAbierto(false); }} perfil={perfil} cfg={cfg} />}
+      {((puntos.length === 0 && !modoManualInicial) || (tab === "ruta" && plannerAbierto)) && <PlannerIA viaje={viaje} actualizar={(v2) => { actualizar(v2); setPlannerAbierto(false); }} perfil={perfil} cfg={cfg} onManual={puntos.length === 0 ? () => setModoManualInicial(true) : null} />}
       {tab === "ruta" && viaje.atraccionPrincipal && <div style={{ background: "linear-gradient(135deg, rgba(232,163,61,.14), rgba(77,163,255,.08))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: "12px 14px", marginBottom: 14, display: "flex", gap: 10, alignItems: "flex-start" }}>
         <Ico n="estrella" s={17} c={T.accent} />
         <div><div style={{ fontSize: 10.5, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 3 }}>Lo imperdible de este viaje</div>
         <div style={{ fontSize: 12.5, color: T.text, lineHeight: 1.5 }}>{viaje.atraccionPrincipal}</div></div>
       </div>}
-      {tab === "ruta" && <>
+      {tab === "ruta" && (puntos.length > 0 || modoManualInicial) && <>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
             <div style={{ flex: 1, fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em" }}>{puntos.length === 0 ? "¿De dónde a dónde?" : `Recorrido (${puntos.length} puntos)`}</div>
