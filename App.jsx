@@ -304,7 +304,7 @@ async function leerVoucherIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.35 · 26 jul 2026";
+const APP_VER = "v10.36 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -320,15 +320,18 @@ async function hayVersionNueva() {
     return !!(m && m[0] !== actual);
   } catch { return false; }
 }
-function UpdateBanner() {
+function UpdateBanner({ seguro = false }) {
+  // seguro=true: acá no hay riesgo de perder algo sin guardar (el
+  // inicio, sin ningún formulario abierto) -> se actualiza sola siempre,
+  // no solo en los primeros 6 segundos. seguro=false (adentro de un
+  // viaje, donde puede haber texto a medio escribir): se queda con el
+  // aviso chico, prudente, en vez de recargar de sorpresa.
   const [hay, setHay] = useState(false);
   useEffect(() => {
     let vivo = true;
     const chequear = async () => {
       if (!(await hayVersionNueva()) || !vivo) return;
-      // recién abierta: se actualiza sola, una sola vez por sesión
-      let auto = false;
-      try { auto = Date.now() - _abiertaEn < 6000 && sessionStorage.getItem("viajes_autoupd") !== "1"; } catch { }
+      let auto = seguro || (Date.now() - _abiertaEn < 6000 && (() => { try { return sessionStorage.getItem("viajes_autoupd") !== "1"; } catch { return true; } })());
       if (auto) { try { sessionStorage.setItem("viajes_autoupd", "1"); } catch { } window.location.replace(window.location.pathname + "?u=" + Date.now()); return; }
       setHay(true);
     };
@@ -336,12 +339,13 @@ function UpdateBanner() {
     const onVis = () => { if (document.visibilityState === "visible") chequear(); };
     document.addEventListener("visibilitychange", onVis);
     return () => { vivo = false; document.removeEventListener("visibilitychange", onVis); };
-  }, []);
+  }, [seguro]);
   if (!hay) return null;
-  return (<div style={{ display: "flex", alignItems: "center", gap: 9, background: T.accent, borderRadius: 12, padding: "10px 12px", margin: "0 0 12px", boxShadow: "0 3px 12px rgba(0,0,0,.25)" }}>
-    <div style={{ flex: 1, fontSize: 12, color: "#1a1205", fontWeight: 800, lineHeight: 1.4 }}>Hay una versión nueva de la app lista para usar.</div>
-    <button onClick={() => window.location.replace(window.location.pathname + "?u=" + Date.now())}
-      style={{ background: "#1a1205", border: "none", color: "#fff", borderRadius: 8, padding: "9px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer", flexShrink: 0 }}>Actualizar</button>
+  // chiquito, discreto — un chip, no un cartel gritando
+  return (<div onClick={() => window.location.replace(window.location.pathname + "?u=" + Date.now())} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: T.card, border: `1px solid ${T.accent}`, borderRadius: 20, padding: "6px 12px 6px 10px", marginBottom: 12, cursor: "pointer" }}>
+    <Ico n="varita" s={12} c={T.accent} />
+    <span style={{ fontSize: 11, color: T.text, fontWeight: 700 }}>Hay una versión nueva</span>
+    <span style={{ fontSize: 11, color: T.accent, fontWeight: 800, textDecoration: "underline" }}>Actualizar</span>
   </div>);
 }
 
@@ -2618,7 +2622,7 @@ function MisViajesApp({ onSalir }) {
       <button onClick={() => setAjustes(true)} style={{ background: T.card, border: `1px solid ${T.border}`, color: T.sub, borderRadius: 11, padding: "10px 11px", cursor: "pointer" }}><Ico n="tuerca" s={18} /></button>
     </div>
     <div style={{ padding: "0 20px 40px" }}>
-      <UpdateBanner />
+      <UpdateBanner seguro />
       <GlobitoPermiso />
       <ChatIdeas cfg={cfg} viajes={data.viajes || []} onCrearViaje={crearViajeYEntrar} />
       {vivido && <NuevoVivido cerrar={() => setVivido(false)} onCrear={(v2) => { guardar({ ...data, viajes: [v2, ...data.viajes] }); setVivido(false); setViajeId(v2.id); }} />}
