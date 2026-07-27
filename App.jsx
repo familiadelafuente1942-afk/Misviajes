@@ -304,7 +304,7 @@ async function leerVoucherIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.31 · 26 jul 2026";
+const APP_VER = "v10.32 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -2212,9 +2212,45 @@ function BuscarLugarConGPS({ onElegir }) {
   </div>);
 }
 
-function ChatIdeas({ cfg, viajes }) {
+function ChatIdeas({ cfg, viajes, onCrearViaje }) {
   const [abierto, setAbierto] = useState(false);
   const [msgs, setMsgs] = useState([]);
+  const [armando, setArmando] = useState(false);
+
+  // El puente real: toma la charla (el destino que eligieron, cuántos días,
+  // desde dónde) y arma el viaje COMPLETO — mismo itinerario con hospedaje
+  // y todo que arma el planificador — sin que tengan que retipear nada.
+  async function armarViajeDeLaCharla() {
+    if (msgs.length < 2) { alert("Contame primero a dónde quieren ir, y elegí una opción."); return; }
+    setArmando(true);
+    try {
+      const sysExtraer = "Analizás una charla sobre planificar un viaje. Respondés SOLO JSON, sin texto ni markdown.";
+      const promptExtraer = `Leé esta charla y decime si ya eligieron un destino concreto para viajar (no una lista de opciones — UNO elegido), desde dónde salen, y cuántos días tienen.\n\nCHARLA:\n${msgs.map(m => `${m.role === "user" ? "Usuario" : "Copiloto"}: ${m.content}`).join("\n")}\n\nRespondé SOLO este JSON:\n{"elegido":true,"destino":"lugar concreto","desde":"ciudad de origen si se menciona, si no poné \"\"","dias":0}\nSi todavía no hay UN destino claro (siguen viendo opciones), poné "elegido":false.`;
+      const respExtraer = await llamarIA([{ role: "user", content: promptExtraer }], sysExtraer, 400);
+      const mE = respExtraer.match(/\{[\s\S]*\}/);
+      const datos = mE ? JSON.parse(mE[0]) : null;
+      if (!datos || !datos.elegido || !datos.destino) { alert("Todavía no veo un destino elegido en la charla — decime cuál les gustó y lo armo."); setArmando(false); return; }
+
+      const perfil = perfilTexto(cfg);
+      const destino = datos.destino, desde = datos.desde || "Buenos Aires, Argentina", dias = datos.dias || 7;
+      const sys = "Sos un planificador de viajes de primer nivel, con conocimiento profundo del mundo. Respondés SOLO con JSON válido, sin texto adicional ni markdown.";
+      const prompt = `${perfil ? `ASÍ VIAJA ESTA GENTE (armá el itinerario exactamente para ellos): ${perfil}\n\n` : ""}Quieren viajar a: ${destino}\nSalen desde: ${desde}\nDías disponibles: ${dias}\n\nArmá el MEJOR itinerario posible para ellos: el orden de lugares, cuántas noches en cada uno, y por qué cada lugar es para ELLOS. Si aman manejar, roadtrip con rutas lindas; si no, ciudades base y traslados cómodos. Si el destino requiere avión desde el origen, la primera parada es la ciudad de llegada.\n\nRespondé SOLO este JSON:\n{"nombre_viaje":"...","paradas":[{"nombre":"Ciudad o lugar","pais_o_provincia":"...","noches":2,"por_que":"1 frase pensada para ellos","lat":-00.0000,"lon":-00.0000}]}`;
+      const resp = await llamarIA([{ role: "user", content: prompt }], sys, 3000);
+      const m = resp.match(/\{[\s\S]*\}/);
+      const plan = m ? JSON.parse(m[0]) : null;
+      if (!plan || !plan.paradas?.length) throw new Error("La IA no devolvió un itinerario válido. Probá de nuevo.");
+      const ps = plan.paradas.filter(p => p.lat && p.lon).map(p => ({ nombre: `${p.nombre}, ${p.pais_o_provincia || ""}`.replace(/, $/, ""), lat: p.lat, lon: p.lon }));
+      const v = {
+        id: uid(), nombre: plan.nombre_viaje || destino, creado: Date.now(), modoViaje: "auto",
+        puntos: ps, sugerencias: [], bitacora: [], fechaInicio: "", diasVacaciones: String(dias),
+        itinerario: plan.paradas.map(p => ({ nombre: p.nombre, noches: p.noches, por_que: p.por_que })),
+      };
+      onCrearViaje(v);
+      setAbierto(false);
+    } catch (e) { alert(e.message || "No pude armar el viaje. Probá de nuevo."); }
+    setArmando(false);
+  }
+
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const endRef = useRef(null);
@@ -2235,7 +2271,7 @@ function ChatIdeas({ cfg, viajes }) {
       const perfil = perfilTexto(cfg);
       const hechos = (viajes || []).map(v2 => { const o = v2.puntos?.[0]?.nombre?.split(",")[0]; const d = v2.puntos?.length > 1 ? v2.puntos[v2.puntos.length - 1].nombre.split(",")[0] : null; return d ? `${v2.nombre} (${o} → ${d})` : v2.nombre; }).join("; ");
       const hoy = new Date().toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" });
-      const sys = `Sos el copiloto de ideas de la app Mis Viajes: un amigo viajado que ayuda a elegir el PRÓXIMO destino. Hoy es ${hoy} (tené en cuenta la estación y la época del año). Contestás en voseo, cálido y concreto.${perfil ? ` Así viaja esta gente (planificá SIEMPRE para ellos): ${perfil}.` : ""}${hechos ? ` Viajes que ya tienen en la app (evitá repetirlos salvo que pidan volver): ${hechos}.` : ""} Cuando recomiendes destinos: da 2 o 3 opciones concretas con el porqué pensado para ellos (qué comer, qué ver, cuántos km o cómo llegar). Si falta un dato clave (días, época, desde dónde), preguntalo corto. Cerrá sugiriendo que cuando elijan, creen el viaje en la app y la IA les arma el itinerario completo.`;
+      const sys = `Sos el copiloto de ideas de la app Mis Viajes: un amigo viajado que ayuda a elegir el PRÓXIMO destino. Hoy es ${hoy} (tené en cuenta la estación y la época del año). Contestás en voseo, cálido y concreto.${perfil ? ` Así viaja esta gente (planificá SIEMPRE para ellos): ${perfil}.` : ""}${hechos ? ` Viajes que ya tienen en la app (evitá repetirlos salvo que pidan volver): ${hechos}.` : ""} Cuando recomiendes destinos: da 2 o 3 opciones concretas con el porqué pensado para ellos (qué comer, qué ver, cuántos km o cómo llegar). Si falta un dato clave (días, época, desde dónde), preguntalo corto. Cuando ya hayan elegido UN destino concreto (no antes), decíselos: que toquen el botón "Armar este viaje ahora" acá abajo y arma todo solo, con hospedaje incluido.`;
       const resp = await llamarIA(nuevos.slice(-12), sys, 1600);
       setMsgs(prev => [...prev, { role: "assistant", content: resp }]);
       if (porVozRef.current) { porVozRef.current = false; hablarTexto(resp); }
@@ -2275,6 +2311,7 @@ function ChatIdeas({ cfg, viajes }) {
         <div ref={endRef} />
       </div>
       <div style={{ padding: "10px 14px", paddingBottom: "max(12px, env(safe-area-inset-bottom))", borderTop: `1px solid ${T.border}` }}>
+        {msgs.length >= 2 && <button onClick={armarViajeDeLaCharla} disabled={armando} style={{ width: "100%", background: armando ? T.card2 : T.accent, border: "none", color: armando ? T.sub : "#1a1205", borderRadius: 12, padding: "12px", fontSize: 13, fontWeight: 800, cursor: "pointer", marginBottom: 9, display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><Ico n="varita" s={14} /> {armando ? "Armando el viaje, con hospedaje y todo…" : "Armar este viaje ahora"}</button>}
         {dictado.escuchando && <div style={{ fontSize: 11.5, color: "#DC2626", fontWeight: 800, textAlign: "center", marginBottom: 7 }}>◉ Escuchando… quedate {PAUSA_VOZ / 1000} segundos en silencio y lo mando</div>}
         <div style={{ display: "flex", gap: 8 }}>
           <BotonMic escuchando={dictado.escuchando} onClick={dictado.toggle} />
@@ -2522,6 +2559,10 @@ function MisViajesApp({ onSalir }) {
     setViajeId(v.id);
     setEligiendoModo(false);
   }
+  function crearViajeYEntrar(v) {
+    guardar({ ...data, viajes: [v, ...(data.viajes || [])] });
+    setViajeId(v.id);
+  }
 
   async function borrarViaje(v) {
     if (!confirm(`¿Borrar "${v.nombre}" con su bitácora, fotos y videos?`)) return;
@@ -2542,7 +2583,7 @@ function MisViajesApp({ onSalir }) {
     <div style={{ padding: "0 20px 40px" }}>
       <UpdateBanner />
       <GlobitoPermiso />
-      <ChatIdeas cfg={cfg} viajes={data.viajes || []} />
+      <ChatIdeas cfg={cfg} viajes={data.viajes || []} onCrearViaje={crearViajeYEntrar} />
       {vivido && <NuevoVivido cerrar={() => setVivido(false)} onCrear={(v2) => { guardar({ ...data, viajes: [v2, ...data.viajes] }); setVivido(false); setViajeId(v2.id); }} />}
       {eligiendoModo && <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={() => setEligiendoModo(false)}>
         <div onClick={e => e.stopPropagation()} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: 22, width: "100%", maxWidth: 340 }}>
