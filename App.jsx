@@ -214,14 +214,26 @@ function cargarLeaflet() {
   });
   return leafletProm;
 }
+// fetch con límite de tiempo: nunca se queda colgado esperando de más
+async function fetchConLimite(url, opciones, limiteMs) {
+  const control = new AbortController();
+  const t = setTimeout(() => control.abort(), limiteMs);
+  try { return await fetch(url, { ...opciones, signal: control.signal }); }
+  finally { clearTimeout(t); }
+}
 async function llamarIA(messages, system, maxTokens = 2500) {
   const body = JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, system, messages });
   let j = null;
-  try { const r = await fetch("/api/claude", { method: "POST", headers: { "Content-Type": "application/json" }, body }); j = await r.json(); } catch { j = null; }
+  try { const r = await fetchConLimite("/api/claude", { method: "POST", headers: { "Content-Type": "application/json" }, body }, 25000); j = await r.json(); } catch { j = null; }
   if (!j || j.error) {
-    // vista previa (artefacto): la API se llama directo, sin clave
-    const r2 = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body });
-    j = await r2.json();
+    // vista previa (artefacto): la API se llama directo, sin clave. En
+    // producción esta vía normalmente no sirve (sin clave del lado del
+    // navegador) — por eso va con su propio límite de tiempo y try/catch,
+    // para que si falla, falle rápido y avise, en vez de quedar colgada.
+    try {
+      const r2 = await fetchConLimite("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body }, 12000);
+      j = await r2.json();
+    } catch { throw new Error("No pude conectar con la IA (revisá la conexión y probá de nuevo)."); }
   }
   if (j.error) throw new Error(j.error.message || "Error de IA");
   return (j.content || []).map(c => c.text || "").join("\n").trim();
@@ -288,11 +300,11 @@ async function leerVoucherIA(file) {
     const resp = await llamarIA([{ role: "user", content: [bloque, { type: "text", text: prompt }] }], sys, 700);
     const m = resp.match(/\{[\s\S]*\}/);
     return m ? JSON.parse(m[0]) : null;
-  } catch { return null; }
+  } catch (e) { throw new Error(e && e.message ? e.message : "No pude leer el pasaje."); }
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.27 · 26 jul 2026";
+const APP_VER = "v10.29 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1061,7 +1073,7 @@ function actualizarVuelo(viaje, vueloId, patch) {
 function pad2(n) { return String(n).padStart(2, "0"); }
 function fechaICS(d) { return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}T${pad2(d.getHours())}${pad2(d.getMinutes())}00`; }
 
-function PanelHorarioVuelo({ viaje, vuelo, actualizar }) {
+function PanelHorarioVuelo({ viaje, vuelo, actualizar, cfg }) {
   const [abierto, setAbierto] = useState(false);
   const [buscando, setBuscando] = useState(false);
   const [calculando, setCalculando] = useState(false);
@@ -1071,6 +1083,8 @@ function PanelHorarioVuelo({ viaje, vuelo, actualizar }) {
   const [buscarDir, setBuscarDir] = useState(false);
   const origenCasa = vuelo.origenCasa || null;
   const internacional = !!vuelo.internacional;
+  const [decidiendo, setDecidiendo] = useState(false);
+  const [decisionTxt, setDecisionTxt] = useState("");
 
   async function usarGPS() {
     setBuscando(true);
@@ -1078,6 +1092,26 @@ function PanelHorarioVuelo({ viaje, vuelo, actualizar }) {
     catch (e) { alert(e.message); }
     setBuscando(false);
   }
+
+  // La decisión sola: si guardaron "Mi casa" y este vuelo todavía no tiene
+  // de dónde salir, se fija el GPS del momento. ¿Están cerca de casa? Usan
+  // casa. ¿Están en otro lado? Usan dónde están de verdad — sin preguntar.
+  async function decidirOrigenSolo() {
+    if (!cfg?.casa || origenCasa) return;
+    setDecidiendo(true);
+    try {
+      const aca = await dondeEstoy();
+      const cerca = distM([aca.lat, aca.lon], [cfg.casa.lat, cfg.casa.lon]) < 1500;   // ~1,5 km = "estás en casa"
+      if (cerca) { actualizar(actualizarVuelo(viaje, vuelo.id, { origenCasa: cfg.casa })); setDecisionTxt("Están en casa — se usó esa dirección."); }
+      else { actualizar(actualizarVuelo(viaje, vuelo.id, { origenCasa: aca })); setDecisionTxt("No están en casa ahora — se usó su ubicación actual."); }
+    } catch {
+      // sin GPS disponible: mejor tirar con la casa que preguntar
+      actualizar(actualizarVuelo(viaje, vuelo.id, { origenCasa: cfg.casa }));
+      setDecisionTxt("No pude confirmar dónde están — se usó la dirección de casa.");
+    }
+    setDecidiendo(false);
+  }
+  useEffect(() => { if (abierto) decidirOrigenSolo(); }, [abierto]);   // se resuelve solo al abrir el panel, sin preguntar nada
   async function calcular() {
     if (!origenCasa) { alert("Decime desde dónde salen: GPS o buscá la dirección."); return; }
     if (!vuelo.fecha || !vuelo.horaSalida) { alert("A este vuelo le falta la fecha o la hora de salida — completala arriba primero."); return; }
@@ -1127,14 +1161,19 @@ function PanelHorarioVuelo({ viaje, vuelo, actualizar }) {
     </button>
     {abierto && <div style={{ background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: 12, marginTop: 7 }}>
       <div style={{ fontSize: 10.5, color: T.sub, marginBottom: 8 }}>¿Desde dónde salen hacia el aeropuerto?</div>
-      {origenCasa ? <div style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(232,163,61,.1)", border: `1px solid ${T.accent}`, borderRadius: 9, padding: "8px 10px", marginBottom: 9 }}>
-        <Ico n="pin" s={13} c={T.accent} />
-        <span style={{ flex: 1, fontSize: 12, color: T.text, fontWeight: 700 }}>{origenCasa.nombre.split(",").slice(0, 2).join(",")}</span>
-        <button onClick={() => { actualizar(actualizarVuelo(viaje, vuelo.id, { origenCasa: null })); setRuta(null); }} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="cerrar" s={10} /></button>
+      {decidiendo && <div style={{ fontSize: 11.5, color: T.accent, marginBottom: 9, display: "flex", alignItems: "center", gap: 6 }}><Ico n="pin" s={12} /> Viendo si están en casa…</div>}
+      {origenCasa ? <div style={{ marginBottom: 9 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(232,163,61,.1)", border: `1px solid ${T.accent}`, borderRadius: 9, padding: "8px 10px" }}>
+          <Ico n="pin" s={13} c={T.accent} />
+          <span style={{ flex: 1, fontSize: 12, color: T.text, fontWeight: 700 }}>{origenCasa.nombre.split(",").slice(0, 2).join(",")}</span>
+          <button onClick={() => { actualizar(actualizarVuelo(viaje, vuelo.id, { origenCasa: null })); setRuta(null); setDecisionTxt(""); }} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="cerrar" s={10} /></button>
+        </div>
+        {decisionTxt && <div style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>{decisionTxt} · <span onClick={decidirOrigenSolo} style={{ color: T.accent, cursor: "pointer", textDecoration: "underline" }}>actualizar</span></div>}
       </div> : <div style={{ display: "flex", gap: 6, marginBottom: 9 }}>
         <button onClick={usarGPS} disabled={buscando} style={{ flex: 1, background: T.card, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "9px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}><Ico n="pin" s={12} /> {buscando ? "Buscando…" : "Usar mi ubicación"}</button>
         <button onClick={() => setBuscarDir(v2 => !v2)} style={{ flex: 1, background: T.card, border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "9px", fontSize: 11.5, cursor: "pointer" }}>Otra dirección</button>
       </div>}
+      {!cfg?.casa && !origenCasa && <div style={{ fontSize: 10, color: T.muted, marginBottom: 9, lineHeight: 1.4 }}>Tip: guardá "Mi casa" en ⚙ Ajustes y esto se completa solo la próxima vez.</div>}
       {buscarDir && !origenCasa && <div style={{ marginBottom: 9 }}><BuscarLugar placeholder="Dirección de salida…" onElegir={(r) => { actualizar(actualizarVuelo(viaje, vuelo.id, { origenCasa: r })); setBuscarDir(false); setRuta(null); }} /></div>}
 
       <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, color: T.sub, marginBottom: 10, cursor: "pointer" }}>
@@ -1157,7 +1196,7 @@ function PanelHorarioVuelo({ viaje, vuelo, actualizar }) {
   </div>);
 }
 
-function VuelosGuardados({ viaje, actualizar, media }) {
+function VuelosGuardados({ viaje, actualizar, media, cfg }) {
   const puntos = viaje.puntos || [];   // (bug corregido: antes esta variable no existía acá)
   const [form, setForm] = useState(null);
   const fileRef = useRef(null);        // botón "＋ Agregar": va directo a Fotos/Archivos
@@ -1177,8 +1216,11 @@ function VuelosGuardados({ viaje, actualizar, media }) {
     if (!f) return;
     setForm(prev => ({ ...(prev || baseForm(null)), archivo: f }));
     setLeyendoIA(true);
-    const datos = await leerVoucherIA(f);
+    let datos = null, errorLectura = "";
+    try { datos = await leerVoucherIA(f); }
+    catch (e) { errorLectura = e.message || "No pude leer el pasaje."; }
     setLeyendoIA(false);
+    if (!datos) { alert(`${errorLectura || "No encontré los datos en la imagen."}\n\nLa foto/PDF ya quedó adjunta igual — completá los campos a mano.`); return; }
     if (datos) setForm(prev => prev ? {
       ...prev,
       aerolinea: datos.aerolinea || prev.aerolinea,
@@ -1240,7 +1282,7 @@ function VuelosGuardados({ viaje, actualizar, media }) {
           <button onClick={() => borrar(v2.id)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="tacho" s={13} /></button>
         </div>
       </div>
-      <PanelHorarioVuelo viaje={viaje} vuelo={v2} actualizar={actualizar} />
+      <PanelHorarioVuelo viaje={viaje} vuelo={v2} actualizar={actualizar} cfg={cfg} />
     </div>))}
     {form && <div style={{ marginTop: 6 }}>
       <div style={{ display: "flex", gap: 7, marginBottom: 7 }}>
@@ -1267,7 +1309,7 @@ function VuelosGuardados({ viaje, actualizar, media }) {
   </div>);
 }
 
-function ReservasTab({ viaje, actualizar, media }) {
+function ReservasTab({ viaje, actualizar, media, cfg }) {
   const puntos = viaje.puntos || [];
   const fp = fechasParada(viaje);
   const [lugarSel, setLugarSel] = useState(puntos.length ? puntos[puntos.length - 1].nombre.split(",")[0] : "");
@@ -1316,7 +1358,7 @@ function ReservasTab({ viaje, actualizar, media }) {
   const AUXILIO = [["gas", "Estación de servicio", "estación de servicio"], ["cajero", "Cajero", "cajero automático"], ["pastilla", "Farmacia", "farmacia de turno"], ["llave", "Gomería", "gomería"], ["carrito", "Supermercado", "supermercado"], ["cruz", "Hospital", "hospital"]];
 
   return (<div>
-    <VuelosGuardados viaje={viaje} actualizar={actualizar} media={media} />
+    <VuelosGuardados viaje={viaje} actualizar={actualizar} media={media} cfg={cfg} />
 
     {/* Viaje recién creado, sin destino todavía: buscador con geocode real,
         que además suma el punto al viaje (así Clima, mapa y bitácora
@@ -1693,6 +1735,16 @@ function Ajustes({ cfg, guardarCfg, cerrar, onSalir }) {
       <input defaultValue={cfg.lema || ""} onBlur={e => guardarCfg({ ...cfg, lema: e.target.value.trim() })} placeholder="Lema chiquito de arriba (ej: Ruta abierta)"
         style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 14px", fontSize: 12.5, color: T.text, outline: "none", boxSizing: "border-box", marginBottom: 24 }} />
 
+      <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>🏠 Mi casa</div>
+      <div style={{ fontSize: 11.5, color: T.sub, lineHeight: 1.5, marginBottom: 10 }}>La guardás una vez y listo: cuando calculen la hora de salir al aeropuerto, la app sabe de dónde salen sin preguntar cada vez. Si ese día no están en casa, usa su ubicación real en el momento.</div>
+      {cfg.casa ? <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(232,163,61,.1)", border: `1px solid ${T.accent}`, borderRadius: 10, padding: "10px 12px", marginBottom: 24 }}>
+        <Ico n="pin" s={14} c={T.accent} />
+        <span style={{ flex: 1, fontSize: 12.5, color: T.text, fontWeight: 700 }}>{cfg.casa.nombre.split(",").slice(0, 2).join(",")}</span>
+        <button onClick={() => guardarCfg({ ...cfg, casa: null })} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="cerrar" s={11} /></button>
+      </div> : <div style={{ marginBottom: 24 }}>
+        <BuscarLugarConGPS onElegir={(r) => guardarCfg({ ...cfg, casa: r })} />
+      </div>}
+
       <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 9 }}>Tema de la app</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24 }}>
         {Object.entries(TEMAS).map(([k, t2]) => { const on = (cfg.tema || "ruta40") === k; return (
@@ -2021,7 +2073,7 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
       </>}
 
       {tab === "clima" && <ClimaTab viaje={viaje} onResumen={setClimaResumen} />}
-      {tab === "reservas" && <ReservasTab viaje={viaje} actualizar={actualizar} media={media} />}
+      {tab === "reservas" && <ReservasTab viaje={viaje} actualizar={actualizar} media={media} cfg={cfg} />}
       {tab === "lugar" && <DelLugarTab viaje={viaje} perfil={perfil} actualizar={actualizar} />}
       {tab === "gastos" && <GastosTab viaje={viaje} actualizar={actualizar} />}
       {tab === "valija" && <ValijaTab viaje={viaje} perfil={perfil} climaResumen={climaResumen} actualizar={actualizar} />}
@@ -2096,6 +2148,19 @@ function CardViaje({ v, onAbrir, onBorrar }) {
    El chat de la portada: sin destino, sin viaje creado. "Tengo 4 días,
    ¿a dónde me recomendás?" — y contesta conociendo su estilo y los
    viajes que ya hicieron. La charla donde nace el próximo viaje. */
+function BuscarLugarConGPS({ onElegir }) {
+  const [buscando, setBuscando] = useState(false);
+  async function usarGPS() {
+    setBuscando(true);
+    try { onElegir(await dondeEstoy()); } catch (e) { alert(e.message); }
+    setBuscando(false);
+  }
+  return (<div>
+    <button onClick={usarGPS} disabled={buscando} style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 10, padding: "11px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", marginBottom: 8 }}><Ico n="pin" s={13} c={T.accent} /> {buscando ? "Buscando…" : "Usar mi ubicación actual"}</button>
+    <BuscarLugar placeholder="O buscá la dirección…" onElegir={onElegir} />
+  </div>);
+}
+
 function ChatIdeas({ cfg, viajes }) {
   const [abierto, setAbierto] = useState(false);
   const [msgs, setMsgs] = useState([]);
