@@ -284,6 +284,27 @@ const extraerJSON = (t) => { const m = t.match(/\[[\s\S]*\]/); if (!m) return nu
    Foto o PDF, va como imagen/documento directo al mismo endpoint de IA
    de toda la app — nada de OCR aparte, es la misma Claude que arma
    itinerarios la que ahora lee pasajes. */
+/* Kayak SÍ permite precargar ruta y fechas en la URL — pero pide
+   códigos de aeropuerto, no nombres de ciudad. Con los destinos más
+   comunes alcanza para que la mayoría de los viajes salgan precargados
+   de verdad; el resto cae en el buscador normal de Kayak, sin romper. */
+const CODIGOS_AEROPUERTO = {
+  "buenos aires": "BUE", "caba": "BUE", "palermo": "BUE", "ciudad de buenos aires": "BUE",
+  "cordoba": "COR", "mendoza": "MDZ", "bariloche": "BRC", "san carlos de bariloche": "BRC",
+  "salta": "SLA", "iguazu": "IGR", "puerto iguazu": "IGR", "ushuaia": "USH",
+  "jujuy": "JUJ", "san salvador de jujuy": "JUJ", "neuquen": "NQN", "rosario": "ROS",
+  "mar del plata": "MDQ", "el calafate": "FTE", "calafate": "FTE", "trelew": "REL",
+  "santiago": "SCL", "santiago de chile": "SCL", "montevideo": "MVD",
+  "sao paulo": "SAO", "rio de janeiro": "RIO", "lima": "LIM", "bogota": "BOG", "asuncion": "ASU",
+  "madrid": "MAD", "barcelona": "BCN", "roma": "ROM", "milan": "MIL",
+  "paris": "PAR", "londres": "LON", "london": "LON", "nueva york": "NYC", "new york": "NYC",
+  "miami": "MIA", "los angeles": "LAX", "cancun": "CUN", "punta cana": "PUJ",
+};
+function codigoAeropuerto(nombre) {
+  const limpio = (nombre || "").split(",")[0].trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return CODIGOS_AEROPUERTO[limpio] || null;
+}
+
 async function archivoABase64(blob) {
   return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(blob); });
 }
@@ -319,7 +340,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.52 · 26 jul 2026";
+const APP_VER = "v10.53 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1656,7 +1677,8 @@ function ReservasTab({ viaje, actualizar, media, cfg }) {
   const [origenVuelo, setOrigenVuelo] = useState((viaje.origenViaje || cfg?.casa?.nombre || puntos[0]?.nombre || "").split(",")[0]);
   // si el lugar elegido tiene fechas en el itinerario, van al enlace
   const f = Object.entries(fp).find(([n]) => n.toLowerCase().includes(lugar.toLowerCase()))?.[1]
-    || (viaje.fechaInicio && viaje.diasVacaciones ? { in: viaje.fechaInicio, out: (() => { const d = new Date(viaje.fechaInicio + "T12:00:00"); d.setDate(d.getDate() + Number(viaje.diasVacaciones)); return d.toISOString().slice(0, 10); })() } : null);
+    || (viaje.fechaInicio && viaje.fechaVuelta ? { in: viaje.fechaInicio, out: viaje.fechaVuelta }   // la fecha de vuelta real, guardada tal cual — sin sumar días de más
+    : (viaje.fechaInicio && viaje.diasVacaciones ? { in: viaje.fechaInicio, out: isoMasDiasSimple(viaje.fechaInicio, Number(viaje.diasVacaciones) - 1) } : null));
   const q = encodeURIComponent(lugar);
   const abrir = (u) => window.open(u, "_blank");
 
@@ -1664,7 +1686,7 @@ function ReservasTab({ viaje, actualizar, media, cfg }) {
     ["cama:Dormir", [
       ["Booking", "#003580", `https://www.booking.com/searchresults.es.html?ss=${q}${f ? `&checkin=${f.in}&checkout=${f.out}` : ""}&group_adults=2`],
       ["Airbnb", "#FF385C", `https://www.airbnb.com.ar/s/${q}/homes?adults=2${f ? `&checkin=${f.in}&checkout=${f.out}` : ""}`],
-      ["Despegar", "#4A148C", `https://www.google.com/search?q=${encodeURIComponent("site:despegar.com.ar paquetes a " + lugar)}`],
+      ["Despegar", "#4A148C", "https://www.despegar.com.ar/hoteles/"],
       ["Hostels", "#F26722", `https://www.spanish.hostelworld.com/s?q=${q}${f ? `&from=${f.in}&to=${f.out}` : ""}`],
     ]],
     ["auto:Alquilar auto", [
@@ -1725,8 +1747,8 @@ function ReservasTab({ viaje, actualizar, media, cfg }) {
       <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>Buscadores</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
         {[["Google Flights", "#4285F4", `https://www.google.com/travel/flights?q=${encodeURIComponent(`vuelos ${origenVuelo ? "de " + origenVuelo + " " : ""}a ${lugar}` + (f?.in && f?.out ? ` del ${f.in} al ${f.out}` : f?.in ? " el " + f.in : ""))}`],
-          ["Despegar Vuelos", "#4A148C", `https://www.google.com/search?q=${encodeURIComponent("site:despegar.com.ar paquetes a " + lugar)}`],
-          ["Kayak", "#FF690F", `https://www.kayak.com.ar/flights`]]
+          ["Despegar Vuelos", "#4A148C", "https://www.despegar.com.ar/vuelos/"],
+          ["Kayak", "#FF690F", (() => { const co = codigoAeropuerto(origenVuelo), cd = codigoAeropuerto(lugar); return co && cd && f?.in ? `https://www.kayak.com.ar/flights/${co}-${cd}/${f.in}${f.out ? `/${f.out}` : ""}` : `https://www.kayak.com.ar/flights`; })()]]
           .map(([nom, color, url]) => <button key={nom} onClick={() => abrir(url)} style={{ background: color, border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{nom}</button>)}
       </div>
 
@@ -1979,7 +2001,7 @@ function HospedajeLinks({ lugar, f }) {
   return (<div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
     {btn("#003580", "#fff", "Booking", `https://www.booking.com/searchresults.es.html?ss=${q}${fechasB}&group_adults=2`)}
     {btn("#FF385C", "#fff", "Airbnb", `https://www.airbnb.com.ar/s/${q}/homes?adults=2${fechasA}`)}
-    {btn("#4A148C", "#fff", "Despegar", `https://www.google.com/search?q=${encodeURIComponent("site:despegar.com.ar paquetes a " + lugar)}`)}
+    {btn("#4A148C", "#fff", "Despegar", "https://www.despegar.com.ar/hoteles/")}
     <button onClick={() => abrir(`https://www.google.com/search?q=${encodeURIComponent("turismo oficial " + lugar + " qué visitar")}`)} style={{ background: T.card2, border: "none", color: T.sub, borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}><Ico n="museo" s={13} /> Turismo oficial</button>
   </div>);
 }
