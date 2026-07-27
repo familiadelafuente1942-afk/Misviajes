@@ -304,7 +304,7 @@ async function leerVoucherIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.41 · 26 jul 2026";
+const APP_VER = "v10.42 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -768,13 +768,32 @@ function MapaRecuerdos({ viaje, entradas, media, lugarSel, setLugarSel, onBorrar
 
 function MediaGrande({ m, tam = 160 }) {
   const [url, setUrl] = useState(null);
+  const [abierto, setAbierto] = useState(false);
   useEffect(() => { const u = URL.createObjectURL(m.blob); setUrl(u); return () => URL.revokeObjectURL(u); }, [m.id]);
   if (!url) return null;
   // Cuadrado siempre, recortando parejo (objectFit cover) — así una foto
   // horizontal y una vertical quedan del mismo tamaño, una al lado de la otra.
-  return m.tipo === "video"
-    ? <video src={url} controls playsInline style={{ width: tam, height: tam, borderRadius: 10, background: "#000", flexShrink: 0, objectFit: "cover" }} />
-    : <img src={url} style={{ width: tam, height: tam, borderRadius: 10, flexShrink: 0, objectFit: "cover" }} />;
+  // Tocarla abre el visor de pantalla completa; el video ya no se
+  // reproduce adentro del cuadradito, solo muestra el primer cuadro
+  // con un ícono de play — el video de verdad se ve grande.
+  return (<>
+    <div onClick={() => setAbierto(true)} style={{ position: "relative", width: tam, height: tam, borderRadius: 10, flexShrink: 0, cursor: "pointer", background: "#000", overflow: "hidden" }}>
+      {m.tipo === "video"
+        ? <video src={url} muted playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        : <img src={url} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+      {m.tipo === "video" && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,.15)" }}>
+        <div style={{ width: Math.max(30, tam * 0.22), height: Math.max(30, tam * 0.22), borderRadius: "50%", background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: 0, height: 0, borderTop: "7px solid transparent", borderBottom: "7px solid transparent", borderLeft: "11px solid #fff", marginLeft: 3 }} />
+        </div>
+      </div>}
+    </div>
+    {abierto && <div onClick={() => setAbierto(false)} style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,.96)", display: "flex", alignItems: "center", justifyContent: "center", padding: "max(50px, env(safe-area-inset-top) + 34px) 16px max(24px, env(safe-area-inset-bottom))" }}>
+      <button onClick={() => setAbierto(false)} style={{ position: "absolute", top: "max(14px, env(safe-area-inset-top))", right: 16, background: "rgba(255,255,255,.14)", border: "none", color: "#fff", borderRadius: "50%", width: 38, height: 38, cursor: "pointer", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}><Ico n="cerrar" s={16} /></button>
+      {m.tipo === "video"
+        ? <video src={url} controls autoPlay playsInline onClick={e => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8 }} />
+        : <img src={url} onClick={e => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }} />}
+    </div>}
+  </>);
 }
 
 /* ═══ CLIP: el video del viaje, hecho en el teléfono ═════════════ */
