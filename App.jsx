@@ -29,13 +29,31 @@ const hoyISO = () => new Date().toISOString().slice(0, 10);
 const fFecha = (iso) => { if (!iso) return "—"; const d = new Date(iso + "T12:00:00"); return d.toLocaleDateString("es-AR", { day: "numeric", month: "short" }); };
 const diasEntre = (a, b) => Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 86400000);
 
+/* ── PERFILES: cada código, su propio espacio ────────────────────
+   Sin mail, sin contraseña — un código que cada uno elige (o le pasan)
+   y a partir de ahí sus viajes quedan separados de los de cualquier
+   otro código, sea en el mismo teléfono o en teléfonos distintos.
+   No es seguridad real: es solo una separación práctica en familia. */
+const PERFIL_ACTIVO_KEY = "viajes_perfil_activo";
+const PERFILES_KEY = "viajes_perfiles";
+const limpiarCodigo = (c) => String(c || "").trim().toUpperCase().replace(/\s+/g, "");
+function listarPerfiles() { try { return JSON.parse(localStorage.getItem(PERFILES_KEY)) || []; } catch { return []; } }
+function guardarPerfiles(lista) { try { localStorage.setItem(PERFILES_KEY, JSON.stringify(lista)); } catch { } }
+function perfilActivo() { try { return localStorage.getItem(PERFIL_ACTIVO_KEY) || null; } catch { return null; } }
+function entrarPerfil(codigo) { try { localStorage.setItem(PERFIL_ACTIVO_KEY, codigo); } catch { } }
+function salirPerfil() { try { localStorage.removeItem(PERFIL_ACTIVO_KEY); } catch { } }
+function crearPerfil(codigo, nombre) {
+  const lista = listarPerfiles();
+  if (!lista.some(p => p.codigo === codigo)) { lista.push({ codigo, nombre: nombre.trim(), creado: Date.now() }); guardarPerfiles(lista); }
+}
+
 /* ── Persistencia: textos en localStorage, media en IndexedDB ───── */
 /* Config global de la app: el fondo elegido y CÓMO les gusta viajar.
    El perfil viajero es lo que hace que la IA planifique COMO USTEDES:
    si aman manejar, les arma roadtrip; si no, ciudades base y trenes. */
 let _memCfg = null;
-const cargarCfg = () => { try { const x = JSON.parse(localStorage.getItem("viajes_cfg")); if (x) return x; } catch { } return _memCfg || {}; };
-const guardarCfgLS = (c) => { _memCfg = c; try { localStorage.setItem("viajes_cfg", JSON.stringify(c)); } catch { } };
+const cargarCfg = () => { try { const x = JSON.parse(localStorage.getItem("viajes_cfg:" + (perfilActivo() || ""))); if (x) return x; } catch { } return _memCfg || {}; };
+const guardarCfgLS = (c) => { _memCfg = c; try { localStorage.setItem("viajes_cfg:" + (perfilActivo() || ""), JSON.stringify(c)); } catch { } };
 const INTERESES = ["Naturaleza", "Pueblitos", "Gastronomía", "Historia", "Montaña", "Playa", "Vino", "Fotografía", "Aventura", "Descanso"];
 function perfilTexto(cfg) {
   const p = [];
@@ -49,8 +67,8 @@ function perfilTexto(cfg) {
 }
 
 let _memLS = null;   // respaldo en RAM cuando no hay localStorage (vista previa)
-const cargar = () => { try { const x = JSON.parse(localStorage.getItem("viajes_data")); if (x) return x; } catch { } return _memLS || { viajes: [] }; };
-const guardarLS = (d) => { _memLS = d; try { localStorage.setItem("viajes_data", JSON.stringify(d)); } catch { } };
+const cargar = () => { try { const x = JSON.parse(localStorage.getItem("viajes_data:" + (perfilActivo() || ""))); if (x) return x; } catch { } return _memLS || { viajes: [] }; };
+const guardarLS = (d) => { _memLS = d; try { localStorage.setItem("viajes_data:" + (perfilActivo() || ""), JSON.stringify(d)); } catch { } };
 
 const _memMedia = new Map();   // respaldo en RAM cuando no hay IndexedDB (vista previa)
 const hayIDB = () => { try { return typeof indexedDB !== "undefined" && !!indexedDB; } catch { return false; } };
@@ -251,7 +269,7 @@ async function dondeEstoy() {
 const extraerJSON = (t) => { const m = t.match(/\[[\s\S]*\]/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.18 · 26 jul 2026";
+const APP_VER = "v10.21 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -953,12 +971,134 @@ function DelLugarTab({ viaje, perfil, actualizar }) {
 /* ═══ RESERVAS: el conserje del viaje ═════════════════════════════
    Todo lo que se reserva o se busca en un viaje, en un solo lugar,
    con el destino y las fechas precargadas en cada enlace. */
-function ReservasTab({ viaje }) {
+const AEROLINEAS_POR_REGION = {
+  argentina: { t: "🇦🇷 Dentro de Argentina", aer: [
+    ["Aerolíneas Argentinas", "#0A3D8F", "https://www.aerolineas.com.ar/"],
+    ["JetSMART", "#5B2A86", "https://www.jetsmart.com/ar/es/"],
+    ["Flybondi", "#5A2D82", "https://www.flybondi.com/ar-es"],
+  ]},
+  sudamerica: { t: "🌎 Sudamérica", aer: [
+    ["Aerolíneas Argentinas", "#0A3D8F", "https://www.aerolineas.com.ar/"],
+    ["LATAM", "#93003C", "https://www.latamairlines.com/ar/es"],
+    ["GOL (Brasil)", "#FF6600", "https://www.voegol.com.br/es"],
+    ["Avianca", "#E4032E", "https://www.avianca.com/ar/es/"],
+    ["Copa Airlines", "#00205B", "https://www.copaair.com/es/web/ar"],
+  ]},
+  norteamerica: { t: "🌎 Norteamérica", aer: [
+    ["Aerolíneas Argentinas", "#0A3D8F", "https://www.aerolineas.com.ar/"],
+    ["LATAM", "#93003C", "https://www.latamairlines.com/ar/es"],
+    ["American Airlines", "#0078D2", "https://www.aa.com/es/"],
+    ["United", "#002244", "https://www.united.com/es/ar"],
+    ["Delta", "#C8102E", "https://es.delta.com/"],
+    ["Aeroméxico", "#0A2E5C", "https://aeromexico.com/es-ar"],
+  ]},
+  europa: { t: "✈️ Europa", aer: [
+    ["Aerolíneas Argentinas", "#0A3D8F", "https://www.aerolineas.com.ar/"],
+    ["Iberia", "#D7192D", "https://www.iberia.com/ar/"],
+    ["LATAM", "#93003C", "https://www.latamairlines.com/ar/es"],
+    ["Lufthansa", "#05164D", "https://www.lufthansa.com/ar/es/homepage"],
+    ["Air Europa", "#00205B", "https://www.aireuropa.com/ar/es/"],
+    ["Air France", "#002157", "https://wwws.airfrance.com.ar/"],
+    ["KLM", "#00A1DE", "https://www.klm.com.ar/"],
+    ["British Airways", "#075AAA", "https://www.britishairways.com/travel/home/execclub/es_ar"],
+  ]},
+  mundo: { t: "🌍 Resto del mundo", aer: [
+    ["Aerolíneas Argentinas", "#0A3D8F", "https://www.aerolineas.com.ar/"],
+    ["LATAM", "#93003C", "https://www.latamairlines.com/ar/es"],
+    ["Qatar Airways", "#5C0632", "https://www.qatarairways.com/es-ar/homepage.html"],
+    ["Emirates", "#D71921", "https://www.emirates.com/ar/spanish/"],
+    ["Turkish Airlines", "#C50034", "https://www.turkishairlines.com/es-ar/"],
+  ]},
+};
+function VuelosGuardados({ viaje, actualizar, media }) {
+  const [form, setForm] = useState(null);
+  const fileRef = useRef(null);
+  const vuelos = viaje.vuelos || [];
+  const IN = { flex: 1, minWidth: 0, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "9px 10px", fontSize: 12.5, color: T.text, outline: "none", boxSizing: "border-box" };
+
+  function nuevoForm() {
+    setForm({ aerolinea: "", numero: "", fecha: "", horaSalida: "", horaLlegada: "", origen: puntos[0]?.nombre?.split(",")[0] || "", destino: puntos[puntos.length - 1]?.nombre?.split(",")[0] || "", archivo: null });
+  }
+  async function guardar() {
+    if (!form.aerolinea.trim() && !form.numero.trim()) { alert("Cargá al menos la aerolínea o el número de vuelo."); return; }
+    let docId = null;
+    if (form.archivo) {
+      const f = form.archivo; const esPdf = f.type === "application/pdf";
+      const blob = esPdf ? f : await comprimirFoto(f);
+      docId = uid();
+      try { await mediaGuardar({ id: docId, viajeId: viaje.id, tipo: esPdf ? "documento" : "foto", blob, nombre: f.name, ts: Date.now() }); }
+      catch { docId = null; alert("No pude guardar el archivo adjunto (¿sin espacio en el teléfono?)."); }
+    }
+    const vuelo = { id: uid(), aerolinea: form.aerolinea.trim(), numero: form.numero.trim().toUpperCase(), fecha: form.fecha, horaSalida: form.horaSalida, horaLlegada: form.horaLlegada, origen: form.origen.trim(), destino: form.destino.trim(), docId };
+    actualizar({ ...viaje, vuelos: [...vuelos, vuelo] });
+    setForm(null);
+  }
+  function borrar(id) {
+    const v2 = vuelos.find(x => x.id === id);
+    if (v2?.docId) mediaBorrar(v2.docId);
+    actualizar({ ...viaje, vuelos: vuelos.filter(x => x.id !== id) });
+  }
+  function verDoc(docId) {
+    const m = (media || []).find(x => x.id === docId);
+    if (!m) { alert("No encuentro el archivo adjunto."); return; }
+    window.open(URL.createObjectURL(m.blob), "_blank");
+  }
+
+  return (<div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 14 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
+      <div style={{ flex: 1, fontSize: 13, fontWeight: 800, color: T.text }}>✈️ Vuelos ya comprados</div>
+      {!form && <button onClick={nuevoForm} style={{ background: "rgba(232,163,61,.12)", border: `1px solid ${T.accent}`, color: T.accent, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>＋ Agregar</button>}
+    </div>
+    {vuelos.length === 0 && !form && <div style={{ fontSize: 11.5, color: T.sub, lineHeight: 1.5 }}>Si ya tienen el pasaje sacado en otro lado, cargá el número de vuelo, el horario, y adjuntá el boarding pass — queda a mano en el viaje, sin necesitar señal.</div>}
+    {vuelos.map(v2 => (<div key={v2.id} style={{ background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 7 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: T.text }}>{v2.aerolinea || "Vuelo"}{v2.numero ? `  ${v2.numero}` : ""}</div>
+          <div style={{ fontSize: 11, color: T.sub, marginTop: 2 }}>{v2.origen} → {v2.destino}</div>
+          <div style={{ fontSize: 11, color: T.sub }}>{v2.fecha ? fFecha(v2.fecha) : ""}{v2.horaSalida ? ` · sale ${v2.horaSalida}` : ""}{v2.horaLlegada ? ` · llega ${v2.horaLlegada}` : ""}</div>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          {v2.docId && <button onClick={() => verDoc(v2.docId)} style={{ background: T.accent, border: "none", color: "#1a1205", borderRadius: 8, padding: "7px 10px", fontSize: 10.5, fontWeight: 800, cursor: "pointer" }}>Ver pasaje</button>}
+          <button onClick={() => borrar(v2.id)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="tacho" s={13} /></button>
+        </div>
+      </div>
+    </div>))}
+    {form && <div style={{ marginTop: 6 }}>
+      <div style={{ display: "flex", gap: 7, marginBottom: 7 }}>
+        <input value={form.aerolinea} onChange={e => setForm({ ...form, aerolinea: e.target.value })} placeholder="Aerolínea" style={IN} />
+        <input value={form.numero} onChange={e => setForm({ ...form, numero: e.target.value })} placeholder="N° vuelo (AR1234)" style={{ ...IN, flex: 0.7 }} />
+      </div>
+      <div style={{ display: "flex", gap: 7, marginBottom: 7 }}>
+        <input value={form.origen} onChange={e => setForm({ ...form, origen: e.target.value })} placeholder="Origen" style={IN} />
+        <input value={form.destino} onChange={e => setForm({ ...form, destino: e.target.value })} placeholder="Destino" style={IN} />
+      </div>
+      <div style={{ display: "flex", gap: 7, marginBottom: 9 }}>
+        <input type="date" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} style={{ ...IN, colorScheme: "dark" }} />
+        <input type="time" value={form.horaSalida} onChange={e => setForm({ ...form, horaSalida: e.target.value })} placeholder="Sale" style={{ ...IN, colorScheme: "dark" }} />
+        <input type="time" value={form.horaLlegada} onChange={e => setForm({ ...form, horaLlegada: e.target.value })} placeholder="Llega" style={{ ...IN, colorScheme: "dark" }} />
+      </div>
+      <button onClick={() => fileRef.current?.click()} style={{ width: "100%", background: T.card2, border: `1.5px dashed ${T.border}`, color: T.text, borderRadius: 10, padding: "11px", fontSize: 12, fontWeight: 700, cursor: "pointer", marginBottom: 9 }}><Ico n="cam" s={14} c={T.accent} /> {form.archivo ? form.archivo.name : "Adjuntar boarding pass / pasaje (foto o PDF)"}</button>
+      <input ref={fileRef} type="file" accept="image/*,application/pdf" onChange={e => setForm({ ...form, archivo: e.target.files[0] || null })} style={{ display: "none" }} />
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={() => setForm(null)} style={{ flex: 1, background: "none", border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "11px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Cancelar</button>
+        <button onClick={guardar} style={{ flex: 2, background: T.accent, border: "none", color: "#1a1205", borderRadius: 9, padding: "11px", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>Guardar vuelo</button>
+      </div>
+    </div>}
+  </div>);
+}
+
+function ReservasTab({ viaje, actualizar, media }) {
   const puntos = viaje.puntos || [];
   const fp = fechasParada(viaje);
   const [lugarSel, setLugarSel] = useState(puntos.length ? puntos[puntos.length - 1].nombre.split(",")[0] : "");
   const [otro, setOtro] = useState("");
   const lugar = otro.trim() || lugarSel;
+  // ── Vuelos: modo auto/avión + región elegida ──
+  const puntoElegido = !otro.trim() ? puntos.find(p => p.nombre.split(",")[0] === lugarSel) : null;
+  const regionSugerida = puntoElegido && /argentina/i.test(puntoElegido.nombre) ? "argentina" : "sudamerica";
+  const [modo, setModo] = useState("auto");        // "auto" o "avion"
+  const [region, setRegion] = useState(regionSugerida);
+  const [origenVuelo, setOrigenVuelo] = useState(puntos[0]?.nombre?.split(",")[0] || "");
   // si el lugar elegido tiene fechas en el itinerario, van al enlace
   const f = Object.entries(fp).find(([n]) => n.toLowerCase().includes(lugar.toLowerCase()))?.[1]
     || (viaje.fechaInicio && viaje.diasVacaciones ? { in: viaje.fechaInicio, out: (() => { const d = new Date(viaje.fechaInicio + "T12:00:00"); d.setDate(d.getDate() + Number(viaje.diasVacaciones)); return d.toISOString().slice(0, 10); })() } : null);
@@ -982,11 +1122,6 @@ function ReservasTab({ viaje }) {
       ["TripAdvisor", "#00AF87", `https://www.tripadvisor.com.ar/Search?q=${encodeURIComponent(lugar + " restaurantes")}`],
       ["Parrillas", "#B45309", `https://www.google.com/maps/search/${encodeURIComponent("parrilla en " + lugar)}`],
     ]],
-    ["✈️ Vuelos", [
-      ["Google Flights", "#4285F4", `https://www.google.com/travel/flights?q=${encodeURIComponent("vuelos a " + lugar + (f ? " el " + f.in : ""))}`],
-      ["Despegar Vuelos", "#4A148C", `https://www.despegar.com.ar/vuelos/`],
-      ["Kayak", "#FF690F", `https://www.kayak.com.ar/flights`],
-    ]],
     ["🎟 Paseos y actividades", [
       ["Civitatis", "#E4405F", `https://www.civitatis.com/ar/buscar/?q=${q}`],
       ["GetYourGuide", "#FF5533", `https://www.getyourguide.es/s/?q=${q}${f ? `&date_from=${f.in}` : ""}`],
@@ -1001,6 +1136,8 @@ function ReservasTab({ viaje }) {
   const AUXILIO = [["⛽ Estación de servicio", "estación de servicio"], ["🏧 Cajero", "cajero automático"], ["💊 Farmacia", "farmacia de turno"], ["🔧 Gomería", "gomería"], ["🛒 Supermercado", "supermercado"], ["🏥 Hospital", "hospital"]];
 
   return (<div>
+    <VuelosGuardados viaje={viaje} actualizar={actualizar} media={media} />
+
     {/* dónde */}
     <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>¿Para dónde?</div>
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
@@ -1011,8 +1148,45 @@ function ReservasTab({ viaje }) {
     {f && lugar && <div style={{ fontSize: 11.5, color: T.sub, marginBottom: 12 }}>Los enlaces van con fechas: <b style={{ color: T.text }}>{fFecha(f.in)} → {fFecha(f.out)}</b></div>}
     {!f && <div style={{ height: 8 }} />}
 
+    {/* cómo viajan a este lugar */}
+    {lugar && <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+      {[["auto", "🚗 En auto"], ["avion", "✈️ En avión"]].map(([k, l]) => <button key={k} onClick={() => setModo(k)} style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1px solid ${modo === k ? T.accent : T.border}`, background: modo === k ? "rgba(232,163,61,.12)" : T.card, color: modo === k ? T.accent : T.sub, fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>{l}</button>)}
+    </div>}
+
+    {lugar && modo === "avion" && <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 10 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 11 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 10, color: T.sub, marginBottom: 3 }}>Desde</div>
+          <input value={origenVuelo} onChange={e => setOrigenVuelo(e.target.value)} placeholder="Buenos Aires"
+            style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "9px 10px", fontSize: 12.5, color: T.text, outline: "none", boxSizing: "border-box" }} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 10, color: T.sub, marginBottom: 3 }}>Hasta</div>
+          <div style={{ background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "9px 10px", fontSize: 12.5, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lugar}</div>
+        </div>
+      </div>
+
+      <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>Buscadores</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
+        {[["Google Flights", "#4285F4", `https://www.google.com/travel/flights?q=${encodeURIComponent(`vuelos ${origenVuelo ? "de " + origenVuelo + " " : ""}a ${lugar}` + (f ? " el " + f.in : ""))}`],
+          ["Despegar Vuelos", "#4A148C", `https://www.despegar.com.ar/vuelos/`],
+          ["Kayak", "#FF690F", `https://www.kayak.com.ar/flights`]]
+          .map(([nom, color, url]) => <button key={nom} onClick={() => abrir(url)} style={{ background: color, border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{nom}</button>)}
+      </div>
+
+      <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>¿A qué región vuelan?</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+        {Object.entries(AEROLINEAS_POR_REGION).map(([k, r]) => <button key={k} onClick={() => setRegion(k)} style={{ background: region === k ? "rgba(232,163,61,.15)" : T.card2, border: `1px solid ${region === k ? T.accent : T.border}`, color: region === k ? T.accent : T.sub, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{r.t}</button>)}
+      </div>
+
+      <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>Aerolíneas — elegí con quién buscar</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {AEROLINEAS_POR_REGION[region].aer.map(([nom, color, url]) => <button key={nom} onClick={() => abrir(url)} style={{ background: color, border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{nom}</button>)}
+      </div>
+    </div>}
+
     {/* secciones */}
-    {lugar && SECCIONES.map(([titulo, links]) => (<div key={titulo} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "12px 13px", marginBottom: 10 }}>
+    {lugar && modo === "auto" && SECCIONES.map(([titulo, links]) => (<div key={titulo} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "12px 13px", marginBottom: 10 }}>
       <div style={{ fontSize: 12.5, fontWeight: 800, color: T.text, marginBottom: 8 }}>{titulo}</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {links.map(([nom, color, url]) => <button key={nom} onClick={() => abrir(url)} style={{ background: color, border: "none", color: color === "#FFD100" ? "#1a1205" : "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{nom}</button>)}
@@ -1299,7 +1473,8 @@ function PlannerIA({ viaje, actualizar, perfil }) {
 }
 
 /* ═══ AJUSTES: hacé la app TUYA ══════════════════════════════════ */
-function Ajustes({ cfg, guardarCfg, cerrar }) {
+function Ajustes({ cfg, guardarCfg, cerrar, onSalir }) {
+  const perfil = (listarPerfiles().find(p => p.codigo === perfilActivo()) || {});
   const fondoRef = useRef(null);
   const [notas, setNotas] = useState(cfg.notas || "");
   const [guardado, setGuardado] = useState(false);
@@ -1379,7 +1554,14 @@ function Ajustes({ cfg, guardarCfg, cerrar }) {
 
       <button onClick={guardarTodo} style={{ width: "100%", marginTop: 16, background: guardado ? T.ok : T.accent, border: "none", color: guardado ? "#fff" : "#1a1205", borderRadius: T.rsm, padding: "15px", fontSize: 14.5, fontWeight: 800, cursor: "pointer", transition: "background .25s" }}>{guardado ? "✓ Guardado — la IA ya viaja como ustedes" : "✓ Guardar mi estilo"}</button>
       <div style={{ fontSize: 11, color: T.muted, textAlign: "center", marginTop: 8, lineHeight: 1.5 }}>Los botones de arriba se guardan solos al tocarlos; este botón asegura también el texto libre y confirma todo junto.</div>
-      <div style={{ textAlign: "center", fontSize: 11, color: T.muted, marginTop: 26 }}>{APP_VER} — la app se chequea sola al abrir y se actualiza apenas hay versión nueva.</div>
+      <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginTop: 26, marginBottom: 9 }}>Este perfil</div>
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.rsm, padding: "12px 13px" }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: T.text }}>{perfil.nombre || "—"}</div>
+        <div style={{ fontSize: 11, color: T.muted, marginTop: 1 }}>Código: {perfilActivo()}</div>
+        <div style={{ fontSize: 10.5, color: T.sub, lineHeight: 1.5, marginTop: 6 }}>Los viajes de este perfil están separados de cualquier otro código, en este teléfono o en cualquier otro.</div>
+        <button onClick={() => { if (confirm("¿Cerrar este perfil? Tus viajes quedan guardados — volvés a entrar con el mismo código.")) onSalir(); }} style={{ width: "100%", marginTop: 10, background: "none", border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "10px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Cerrar este perfil</button>
+      </div>
+      <div style={{ textAlign: "center", fontSize: 11, color: T.muted, marginTop: 18 }}>{APP_VER} — la app se chequea sola al abrir y se actualiza apenas hay versión nueva.</div>
     </div>
   </div>);
 }
@@ -1651,7 +1833,7 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
       </>}
 
       {tab === "clima" && <ClimaTab viaje={viaje} onResumen={setClimaResumen} />}
-      {tab === "reservas" && <ReservasTab viaje={viaje} />}
+      {tab === "reservas" && <ReservasTab viaje={viaje} actualizar={actualizar} media={media} />}
       {tab === "lugar" && <DelLugarTab viaje={viaje} perfil={perfil} actualizar={actualizar} />}
       {tab === "gastos" && <GastosTab viaje={viaje} actualizar={actualizar} />}
       {tab === "valija" && <ValijaTab viaje={viaje} perfil={perfil} climaResumen={climaResumen} actualizar={actualizar} />}
@@ -1947,7 +2129,65 @@ function NuevoVivido({ onCrear, cerrar }) {
 }
 
 /* ═══ APP: LISTA DE VIAJES ═══════════════════════════════════════ */
+/* Pantalla de entrada: sin mail, sin contraseña. Un código que cada
+   quien elige (o le pasan) separa los espacios. Si el código ya existe
+   en ESTE teléfono, entra directo; si es nuevo, pide un nombre y lo crea. */
+function SelectorPerfil({ onEntrar }) {
+  const [codigo, setCodigo] = useState("");
+  const [nombreNuevo, setNombreNuevo] = useState("");
+  const [creando, setCreando] = useState(false);
+  const conocidos = listarPerfiles();
+
+  function intentar() {
+    const c = limpiarCodigo(codigo);
+    if (c.length < 4) { alert("El código tiene que tener al menos 4 caracteres."); return; }
+    const existe = conocidos.some(p => p.codigo === c);
+    if (existe) { entrarPerfil(c); onEntrar(c); }
+    else setCreando(true);
+  }
+  function confirmarCreacion() {
+    const c = limpiarCodigo(codigo);
+    if (!nombreNuevo.trim()) { alert("Poné un nombre para este perfil."); return; }
+    crearPerfil(c, nombreNuevo);
+    entrarPerfil(c);
+    onEntrar(c);
+  }
+
+  return (<div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", justifyContent: "center", padding: 24 }}>
+    <div style={{ textAlign: "center", marginBottom: 30 }}>
+      <div style={{ fontSize: 40, marginBottom: 8 }}>🧭</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: T.text }}>Mis Viajes</div>
+      <div style={{ fontSize: 12.5, color: T.sub, marginTop: 6, lineHeight: 1.5 }}>Cada código tiene su propio espacio, separado del resto.<br />Sin mail, sin contraseña — el que uses vos.</div>
+    </div>
+
+    {!creando ? <>
+      <input value={codigo} onChange={e => setCodigo(e.target.value)} onKeyDown={e => e.key === "Enter" && intentar()} placeholder="Tu código (ej: VALEN2026)"
+        autoCapitalize="characters" style={{ background: T.card, border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "15px 16px", fontSize: 16, color: T.text, outline: "none", textAlign: "center", fontWeight: 700, letterSpacing: 1, marginBottom: 12 }} />
+      <button onClick={intentar} style={{ background: T.accent, border: "none", color: "#1a1205", borderRadius: 12, padding: "15px", fontSize: 14.5, fontWeight: 800, cursor: "pointer", marginBottom: conocidos.length ? 22 : 0 }}>Entrar</button>
+
+      {conocidos.length > 0 && <>
+        <div style={{ fontSize: 10.5, color: T.muted, textAlign: "center", marginBottom: 10 }}>Perfiles usados en este teléfono</div>
+        <div style={{ display: "flex", gap: 7, flexWrap: "wrap", justifyContent: "center" }}>
+          {conocidos.map(p => <button key={p.codigo} onClick={() => { entrarPerfil(p.codigo); onEntrar(p.codigo); }} style={{ background: T.card, border: `1px solid ${T.border}`, color: T.text, borderRadius: 20, padding: "9px 15px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>{p.nombre}</button>)}
+        </div>
+      </>}
+    </> : <>
+      <div style={{ fontSize: 13, color: T.text, textAlign: "center", marginBottom: 14, lineHeight: 1.5 }}>El código <b style={{ color: T.accent }}>{limpiarCodigo(codigo)}</b> es nuevo acá.<br />¿De quién es este perfil?</div>
+      <input value={nombreNuevo} onChange={e => setNombreNuevo(e.target.value)} onKeyDown={e => e.key === "Enter" && confirmarCreacion()} placeholder="Tu nombre"
+        style={{ background: T.card, border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "14px 16px", fontSize: 15, color: T.text, outline: "none", textAlign: "center", marginBottom: 12 }} />
+      <button onClick={confirmarCreacion} style={{ background: T.accent, border: "none", color: "#1a1205", borderRadius: 12, padding: "15px", fontSize: 14.5, fontWeight: 800, cursor: "pointer", marginBottom: 10 }}>Crear mi perfil</button>
+      <button onClick={() => setCreando(false)} style={{ background: "none", border: "none", color: T.sub, fontSize: 12.5, cursor: "pointer", padding: 8 }}>← Volver</button>
+    </>}
+  </div>);
+}
+
 export default function MisViajes() {
+  const [perfil, setPerfil] = useState(perfilActivo);
+  if (!perfil) return <SelectorPerfil onEntrar={setPerfil} />;
+  return <MisViajesApp key={perfil} onSalir={() => { salirPerfil(); setPerfil(null); }} />;
+}
+
+function MisViajesApp({ onSalir }) {
   const [data, setData] = useState(cargar);
   const [cfg, setCfg] = useState(cargarCfg);
   aplicarTema(cfg.tema);   // el tema se aplica ANTES de dibujar nada
@@ -1984,7 +2224,7 @@ export default function MisViajes() {
   }
 
   return (<Fondo key={(cfg.tema || "ruta40") + "_h"} cfg={cfg}><div style={{ minHeight: "100vh" }}>
-    {ajustes && <Ajustes cfg={cfg} guardarCfg={guardarCfg} cerrar={() => setAjustes(false)} />}
+    {ajustes && <Ajustes cfg={cfg} guardarCfg={guardarCfg} cerrar={() => setAjustes(false)} onSalir={onSalir} />}
     <div style={{ padding: "26px 20px 18px", paddingTop: "max(26px, env(safe-area-inset-top))", display: "flex", alignItems: "flex-start" }}>
       <div style={{ flex: 1 }}>
       <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".14em" }}><Ico n="auto" s={14} /> {cfg.lema || "Ruta abierta"}</div>
