@@ -304,7 +304,7 @@ async function leerVoucherIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.34 · 26 jul 2026";
+const APP_VER = "v10.35 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1411,7 +1411,7 @@ function ReservasTab({ viaje, actualizar, media, cfg }) {
     ["cama:Dormir", [
       ["Booking", "#003580", `https://www.booking.com/searchresults.es.html?ss=${q}${f ? `&checkin=${f.in}&checkout=${f.out}` : ""}&group_adults=2`],
       ["Airbnb", "#FF385C", `https://www.airbnb.com.ar/s/${q}/homes?adults=2${f ? `&checkin=${f.in}&checkout=${f.out}` : ""}`],
-      ["Despegar", "#4A148C", `https://www.google.com/search?q=${encodeURIComponent("site:despegar.com.ar hoteles " + lugar)}`],
+      ["Despegar", "#4A148C", "https://www.despegar.com.ar/hoteles/"],
       ["Hostels", "#F26722", `https://www.spanish.hostelworld.com/s?q=${q}${f ? `&from=${f.in}&to=${f.out}` : ""}`],
     ]],
     ["auto:Alquilar auto", [
@@ -1479,7 +1479,7 @@ function ReservasTab({ viaje, actualizar, media, cfg }) {
       <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>Buscadores</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
         {[["Google Flights", "#4285F4", `https://www.google.com/travel/flights?q=${encodeURIComponent(`vuelos ${origenVuelo ? "de " + origenVuelo + " " : ""}a ${lugar}` + (f ? " el " + f.in : ""))}`],
-          ["Despegar Vuelos", "#4A148C", `https://www.google.com/search?q=${encodeURIComponent("site:despegar.com.ar vuelos a " + lugar)}`],
+          ["Despegar Vuelos", "#4A148C", `https://www.despegar.com.ar/vuelos/`],
           ["Kayak", "#FF690F", `https://www.kayak.com.ar/flights`]]
           .map(([nom, color, url]) => <button key={nom} onClick={() => abrir(url)} style={{ background: color, border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{nom}</button>)}
       </div>
@@ -1731,7 +1731,7 @@ function HospedajeLinks({ lugar, f }) {
   return (<div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
     {btn("#003580", "#fff", "Booking", `https://www.booking.com/searchresults.es.html?ss=${q}${fechasB}&group_adults=2`)}
     {btn("#FF385C", "#fff", "Airbnb", `https://www.airbnb.com.ar/s/${q}/homes?adults=2${fechasA}`)}
-    {btn("#4A148C", "#fff", "Despegar", `https://www.google.com/search?q=${encodeURIComponent("site:despegar.com.ar hoteles " + lugar)}`)}
+    {btn("#4A148C", "#fff", "Despegar", "https://www.despegar.com.ar/hoteles/")}
     <button onClick={() => abrir(`https://www.google.com/search?q=${encodeURIComponent("turismo oficial " + lugar + " qué visitar")}`)} style={{ background: T.card2, border: "none", color: T.sub, borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}><Ico n="museo" s={13} /> Turismo oficial</button>
   </div>);
 }
@@ -1751,7 +1751,7 @@ function PlannerIA({ viaje, actualizar, perfil }) {
     setArmando(true);
     try {
       const sys = "Sos un planificador de viajes de primer nivel, con conocimiento profundo del mundo. Respondés SOLO con JSON válido, sin texto adicional ni markdown.";
-      const prompt = `${perfil ? `ASÍ VIAJA ESTA GENTE (armá el itinerario exactamente para ellos): ${perfil}\n\n` : ""}Quieren viajar a: ${destino}\nSalen desde: ${desde}\nDías disponibles: ${dias}\n\nArmá el MEJOR itinerario posible para ellos: el orden de lugares, cuántas noches en cada uno, y por qué cada lugar es para ELLOS. Si aman manejar, roadtrip con rutas lindas; si no, ciudades base y traslados cómodos. Si el destino requiere avión desde el origen, la primera parada es la ciudad de llegada.\n\nRespondé SOLO este JSON:\n{"nombre_viaje":"...","paradas":[{"nombre":"Ciudad o lugar","pais_o_provincia":"...","noches":2,"por_que":"1 frase pensada para ellos","lat":-00.0000,"lon":-00.0000}]}`;
+      const prompt = `${perfil ? `ASÍ VIAJA ESTA GENTE (armá el itinerario exactamente para ellos): ${perfil}\n\n` : ""}Quieren viajar a: ${destino}\nSalen desde: ${desde}\nDías disponibles: ${dias}\n\nANTES de armar nada, pensá: ¿qué es lo que hace FAMOSO a este destino — lo principal, lo que nadie que va ahí se puede perder? Ejemplos de cómo pensarlo: Egipto → las pirámides de Giza y el Nilo. Mendoza → la Ruta del Vino y las bodegas. Santiago de Compostela → el Camino de Santiago. Cusco → Machu Picchu y el Camino Inca. Orlando → los parques Disney. Alemania, según la ciudad → historia (Berlín: el Muro; Múnich: la Oktoberfest). Si esa atracción central es EN SÍ un recorrido de varios días (un camino de peregrinación, una ruta del vino, la Ruta 40), las paradas del itinerario tienen que ser LAS ETAPAS de ese recorrido — pueblos y tramos en orden — no una ciudad genérica con noches sueltas. Si es un sitio puntual (pirámides, un parque, una torre), asegurate de que al menos una parada esté dedicada explícitamente a eso, con el "por_que" explicando por qué es lo imperdible. Armá el MEJOR itinerario posible para ellos: el orden de lugares, cuántas noches en cada uno, y por qué cada lugar es para ELLOS. Si aman manejar, roadtrip con rutas lindas; si no, ciudades base y traslados cómodos. Si el destino requiere avión desde el origen, la primera parada es la ciudad de llegada.\n\nRespondé SOLO este JSON:\n{"nombre_viaje":"...","atraccion_principal":"1 frase: lo imperdible de este viaje y por qué armamos el recorrido así","paradas":[{"nombre":"Ciudad o lugar","pais_o_provincia":"...","noches":2,"por_que":"1 frase pensada para ellos, conectada con lo imperdible del lugar","lat":-00.0000,"lon":-00.0000}]}`;
       const resp = await llamarIA([{ role: "user", content: prompt }], sys, 3000);
       const m = resp.match(/\{[\s\S]*\}/);
       const plan = m ? JSON.parse(m[0]) : null;
@@ -1762,6 +1762,7 @@ function PlannerIA({ viaje, actualizar, perfil }) {
         nombre: plan.nombre_viaje || viaje.nombre,
         puntos: ps,
         itinerario: plan.paradas.map(p => ({ nombre: p.nombre, noches: p.noches, por_que: p.por_que })),
+        atraccionPrincipal: plan.atraccion_principal || "",
         diasVacaciones: viaje.diasVacaciones || dias,
       });
     } catch (e) { alert(e.message); }
@@ -2083,6 +2084,11 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
       <BarraViaje viaje={viaje} actualizar={actualizar} />
 
       {tab === "ruta" && (puntos.length === 0 || plannerAbierto) && <PlannerIA viaje={viaje} actualizar={(v2) => { actualizar(v2); setPlannerAbierto(false); }} perfil={perfil} />}
+      {tab === "ruta" && viaje.atraccionPrincipal && <div style={{ background: "linear-gradient(135deg, rgba(232,163,61,.14), rgba(77,163,255,.08))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: "12px 14px", marginBottom: 14, display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <Ico n="estrella" s={17} c={T.accent} />
+        <div><div style={{ fontSize: 10.5, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 3 }}>Lo imperdible de este viaje</div>
+        <div style={{ fontSize: 12.5, color: T.text, lineHeight: 1.5 }}>{viaje.atraccionPrincipal}</div></div>
+      </div>}
       {tab === "ruta" && <>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
@@ -2264,7 +2270,7 @@ function ChatIdeas({ cfg, viajes, onCrearViaje }) {
       const perfil = perfilTexto(cfg);
       const destino = datos.destino, desde = datos.desde || "Buenos Aires, Argentina", dias = datos.dias || 7;
       const sys = "Sos un planificador de viajes de primer nivel, con conocimiento profundo del mundo. Respondés SOLO con JSON válido, sin texto adicional ni markdown.";
-      const prompt = `${perfil ? `ASÍ VIAJA ESTA GENTE (armá el itinerario exactamente para ellos): ${perfil}\n\n` : ""}Quieren viajar a: ${destino}\nSalen desde: ${desde}\nDías disponibles: ${dias}\n\nArmá el MEJOR itinerario posible para ellos: el orden de lugares, cuántas noches en cada uno, y por qué cada lugar es para ELLOS. Si aman manejar, roadtrip con rutas lindas; si no, ciudades base y traslados cómodos. Si el destino requiere avión desde el origen, la primera parada es la ciudad de llegada.\n\nRespondé SOLO este JSON:\n{"nombre_viaje":"...","paradas":[{"nombre":"Ciudad o lugar","pais_o_provincia":"...","noches":2,"por_que":"1 frase pensada para ellos","lat":-00.0000,"lon":-00.0000}]}`;
+      const prompt = `${perfil ? `ASÍ VIAJA ESTA GENTE (armá el itinerario exactamente para ellos): ${perfil}\n\n` : ""}Quieren viajar a: ${destino}\nSalen desde: ${desde}\nDías disponibles: ${dias}\n\nANTES de armar nada, pensá: ¿qué es lo que hace FAMOSO a este destino — lo principal, lo que nadie que va ahí se puede perder? Ejemplos de cómo pensarlo: Egipto → las pirámides de Giza y el Nilo. Mendoza → la Ruta del Vino y las bodegas. Santiago de Compostela → el Camino de Santiago. Cusco → Machu Picchu y el Camino Inca. Orlando → los parques Disney. Alemania, según la ciudad → historia (Berlín: el Muro; Múnich: la Oktoberfest). Si esa atracción central es EN SÍ un recorrido de varios días (un camino de peregrinación, una ruta del vino, la Ruta 40), las paradas del itinerario tienen que ser LAS ETAPAS de ese recorrido — pueblos y tramos en orden — no una ciudad genérica con noches sueltas. Si es un sitio puntual (pirámides, un parque, una torre), asegurate de que al menos una parada esté dedicada explícitamente a eso, con el "por_que" explicando por qué es lo imperdible. Armá el MEJOR itinerario posible para ellos: el orden de lugares, cuántas noches en cada uno, y por qué cada lugar es para ELLOS. Si aman manejar, roadtrip con rutas lindas; si no, ciudades base y traslados cómodos. Si el destino requiere avión desde el origen, la primera parada es la ciudad de llegada.\n\nRespondé SOLO este JSON:\n{"nombre_viaje":"...","atraccion_principal":"1 frase: lo imperdible de este viaje y por qué armamos el recorrido así","paradas":[{"nombre":"Ciudad o lugar","pais_o_provincia":"...","noches":2,"por_que":"1 frase pensada para ellos, conectada con lo imperdible del lugar","lat":-00.0000,"lon":-00.0000}]}`;
       const resp = await llamarIA([{ role: "user", content: prompt }], sys, 3000);
       const m = resp.match(/\{[\s\S]*\}/);
       const plan = m ? JSON.parse(m[0]) : null;
@@ -2274,6 +2280,7 @@ function ChatIdeas({ cfg, viajes, onCrearViaje }) {
         id: uid(), nombre: plan.nombre_viaje || destino, creado: Date.now(), modoViaje: "auto",
         puntos: ps, sugerencias: [], bitacora: [], fechaInicio: "", diasVacaciones: String(dias),
         itinerario: plan.paradas.map(p => ({ nombre: p.nombre, noches: p.noches, por_que: p.por_que })),
+        atraccionPrincipal: plan.atraccion_principal || "",
       };
       onCrearViaje(v);
       setAbierto(false);
