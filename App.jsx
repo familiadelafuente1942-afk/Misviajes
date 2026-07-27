@@ -304,7 +304,7 @@ async function leerVoucherIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.37 · 26 jul 2026";
+const APP_VER = "v10.38 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1415,7 +1415,7 @@ function ReservasTab({ viaje, actualizar, media, cfg }) {
     ["cama:Dormir", [
       ["Booking", "#003580", `https://www.booking.com/searchresults.es.html?ss=${q}${f ? `&checkin=${f.in}&checkout=${f.out}` : ""}&group_adults=2`],
       ["Airbnb", "#FF385C", `https://www.airbnb.com.ar/s/${q}/homes?adults=2${f ? `&checkin=${f.in}&checkout=${f.out}` : ""}`],
-      ["Despegar", "#4A148C", "https://www.despegar.com.ar/hoteles/"],
+      ["Despegar", "#4A148C", `https://www.google.com/search?q=${encodeURIComponent("site:despegar.com.ar paquetes a " + lugar)}`],
       ["Hostels", "#F26722", `https://www.spanish.hostelworld.com/s?q=${q}${f ? `&from=${f.in}&to=${f.out}` : ""}`],
     ]],
     ["auto:Alquilar auto", [
@@ -1483,7 +1483,7 @@ function ReservasTab({ viaje, actualizar, media, cfg }) {
       <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>Buscadores</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
         {[["Google Flights", "#4285F4", `https://www.google.com/travel/flights?q=${encodeURIComponent(`vuelos ${origenVuelo ? "de " + origenVuelo + " " : ""}a ${lugar}` + (f ? " el " + f.in : ""))}`],
-          ["Despegar Vuelos", "#4A148C", `https://www.despegar.com.ar/vuelos/`],
+          ["Despegar Vuelos", "#4A148C", `https://www.google.com/search?q=${encodeURIComponent("site:despegar.com.ar paquetes a " + lugar)}`],
           ["Kayak", "#FF690F", `https://www.kayak.com.ar/flights`]]
           .map(([nom, color, url]) => <button key={nom} onClick={() => abrir(url)} style={{ background: color, border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{nom}</button>)}
       </div>
@@ -1735,7 +1735,7 @@ function HospedajeLinks({ lugar, f }) {
   return (<div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
     {btn("#003580", "#fff", "Booking", `https://www.booking.com/searchresults.es.html?ss=${q}${fechasB}&group_adults=2`)}
     {btn("#FF385C", "#fff", "Airbnb", `https://www.airbnb.com.ar/s/${q}/homes?adults=2${fechasA}`)}
-    {btn("#4A148C", "#fff", "Despegar", "https://www.despegar.com.ar/hoteles/")}
+    {btn("#4A148C", "#fff", "Despegar", `https://www.google.com/search?q=${encodeURIComponent("site:despegar.com.ar paquetes a " + lugar)}`)}
     <button onClick={() => abrir(`https://www.google.com/search?q=${encodeURIComponent("turismo oficial " + lugar + " qué visitar")}`)} style={{ background: T.card2, border: "none", color: T.sub, borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}><Ico n="museo" s={13} /> Turismo oficial</button>
   </div>);
 }
