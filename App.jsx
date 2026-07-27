@@ -319,7 +319,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.44 · 26 jul 2026";
+const APP_VER = "v10.45 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -712,7 +712,7 @@ function Bitacora({ viaje, actualizar, media, recargarMedia }) {
       </div>
       {en.texto && <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: deEntrada(en).length ? 9 : 0 }}>{en.texto}</div>}
       {deEntrada(en).length > 0 && <div style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 3 }}>
-        {deEntrada(en).map(m => <MediaGrande key={m.id} m={m} />)}
+        {deEntrada(en).map((m, i) => <MediaGrande key={m.id} m={m} items={deEntrada(en)} index={i} />)}
       </div>}
     </div>))}
   </div>);
@@ -775,16 +775,40 @@ function MapaRecuerdos({ viaje, entradas, media, lugarSel, setLugarSel, onBorrar
           <button onClick={() => { onBorrarEntrada(en); setLugarSel(null); }} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer", padding: 2 }}><Ico n="tacho" s={13} /></button>
         </div>
         {en.texto && <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: deEntrada(en).length ? 8 : 0 }}>{en.texto}</div>}
-        {deEntrada(en).length > 0 && <div style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 3 }}>{deEntrada(en).map(m => <MediaGrande key={m.id} m={m} />)}</div>}
+        {deEntrada(en).length > 0 && <div style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 3 }}>{deEntrada(en).map((m, i) => <MediaGrande key={m.id} m={m} items={deEntrada(en)} index={i} />)}</div>}
       </div>))}
     </div>}
   </div>);
 }
 
-function MediaGrande({ m, tam = 160 }) {
+function MediaGrande({ m, tam = 160, items, index = 0 }) {
   const [url, setUrl] = useState(null);
   const [abierto, setAbierto] = useState(false);
+  const [indiceActual, setIndiceActual] = useState(index);
+  const [urlGrande, setUrlGrande] = useState(null);
+  const lista = items && items.length ? items : [m];        // sin "items" (llamadas viejas), se comporta como antes: una sola
+  const actual = lista[indiceActual] || m;
+  const touchX = useRef(null);
+
   useEffect(() => { const u = URL.createObjectURL(m.blob); setUrl(u); return () => URL.revokeObjectURL(u); }, [m.id]);
+  useEffect(() => {
+    if (!abierto) { setUrlGrande(null); return; }
+    const u = URL.createObjectURL(actual.blob); setUrlGrande(u);
+    return () => URL.revokeObjectURL(u);
+  }, [abierto, actual.id]);
+
+  function abrir() { setIndiceActual(index); setAbierto(true); }
+  function anterior(e) { e.stopPropagation(); setIndiceActual(i => Math.max(0, i - 1)); }
+  function siguiente(e) { e.stopPropagation(); setIndiceActual(i => Math.min(lista.length - 1, i + 1)); }
+  function onTouchStart(e) { touchX.current = e.touches[0].clientX; }
+  function onTouchEnd(e) {
+    if (touchX.current == null) return;
+    const dx = e.changedTouches[0].clientX - touchX.current; touchX.current = null;
+    if (Math.abs(dx) < 40) return;
+    if (dx < 0) setIndiceActual(i => Math.min(lista.length - 1, i + 1));   // deslizó a la izquierda -> siguiente
+    else setIndiceActual(i => Math.max(0, i - 1));                         // a la derecha -> anterior
+  }
+
   if (!url) return null;
   // Cuadrado siempre, recortando parejo (objectFit cover) — así una foto
   // horizontal y una vertical quedan del mismo tamaño, una al lado de la otra.
@@ -792,7 +816,7 @@ function MediaGrande({ m, tam = 160 }) {
   // reproduce adentro del cuadradito, solo muestra el primer cuadro
   // con un ícono de play — el video de verdad se ve grande.
   return (<>
-    <div onClick={() => setAbierto(true)} style={{ position: "relative", width: tam, height: tam, borderRadius: 10, flexShrink: 0, cursor: "pointer", background: "#000", overflow: "hidden" }}>
+    <div onClick={abrir} style={{ position: "relative", width: tam, height: tam, borderRadius: 10, flexShrink: 0, cursor: "pointer", background: "#000", overflow: "hidden" }}>
       {m.tipo === "video"
         ? <video src={url} muted playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         : <img src={url} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
@@ -802,11 +826,14 @@ function MediaGrande({ m, tam = 160 }) {
         </div>
       </div>}
     </div>
-    {abierto && <div onClick={() => setAbierto(false)} style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,.96)", display: "flex", alignItems: "center", justifyContent: "center", padding: "max(50px, env(safe-area-inset-top) + 34px) 16px max(24px, env(safe-area-inset-bottom))" }}>
-      <button onClick={() => setAbierto(false)} style={{ position: "absolute", top: "max(14px, env(safe-area-inset-top))", right: 16, background: "rgba(255,255,255,.14)", border: "none", color: "#fff", borderRadius: "50%", width: 38, height: 38, cursor: "pointer", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}><Ico n="cerrar" s={16} /></button>
-      {m.tipo === "video"
-        ? <video src={url} controls autoPlay playsInline onClick={e => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8 }} />
-        : <img src={url} onClick={e => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }} />}
+    {abierto && urlGrande && <div onClick={() => setAbierto(false)} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,.96)", display: "flex", alignItems: "center", justifyContent: "center", padding: "max(50px, env(safe-area-inset-top) + 34px) 16px max(24px, env(safe-area-inset-bottom))" }}>
+      <button onClick={() => setAbierto(false)} style={{ position: "absolute", top: "max(14px, env(safe-area-inset-top))", right: 16, background: "rgba(255,255,255,.14)", border: "none", color: "#fff", borderRadius: "50%", width: 38, height: 38, cursor: "pointer", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center" }}><Ico n="cerrar" s={16} /></button>
+      {lista.length > 1 && <div style={{ position: "absolute", top: "max(14px, env(safe-area-inset-top))", left: 16, background: "rgba(255,255,255,.14)", color: "#fff", borderRadius: 20, padding: "9px 14px", fontSize: 12, fontWeight: 700, zIndex: 2 }}>{indiceActual + 1} / {lista.length}</div>}
+      {lista.length > 1 && indiceActual > 0 && <button onClick={anterior} style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,.14)", border: "none", color: "#fff", borderRadius: "50%", width: 40, height: 40, cursor: "pointer", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>‹</button>}
+      {lista.length > 1 && indiceActual < lista.length - 1 && <button onClick={siguiente} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,.14)", border: "none", color: "#fff", borderRadius: "50%", width: 40, height: 40, cursor: "pointer", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>›</button>}
+      {actual.tipo === "video"
+        ? <video key={actual.id} src={urlGrande} controls autoPlay playsInline onClick={e => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8 }} />
+        : <img key={actual.id} src={urlGrande} onClick={e => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }} />}
     </div>}
   </>);
 }
