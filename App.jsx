@@ -319,7 +319,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.51 · 26 jul 2026";
+const APP_VER = "v10.52 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1749,14 +1749,16 @@ function ReservasTab({ viaje, actualizar, media, cfg }) {
       </div>
     </div>); })}
 
-    {/* auxilios en ruta: usan TU ubicación actual */}
-    <div style={{ background: "linear-gradient(135deg, rgba(232,163,61,.1), rgba(77,163,255,.06))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: "12px 13px" }}>
+    {/* auxilios en ruta: usan TU ubicación actual — solo tiene sentido
+        manejando (estación de servicio, gomería, dónde parar en el auto).
+        En avión no hay "ruta" que recorrer, así que no se muestra. */}
+    {modo === "auto" && <div style={{ background: "linear-gradient(135deg, rgba(232,163,61,.1), rgba(77,163,255,.06))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: "12px 13px" }}>
       <div style={{ fontSize: 12.5, fontWeight: 800, color: T.text, marginBottom: 2, display: "flex", alignItems: "center", gap: 7 }}><Ico n="alerta" s={14} c={T.danger} /> Ya en la ruta, cerca tuyo</div>
       <div style={{ fontSize: 11, color: T.sub, marginBottom: 9 }}>Abren el mapa buscando alrededor de donde estás AHORA.</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {AUXILIO.map(([ic, l, q2]) => <button key={l} onClick={() => abrir(`https://www.google.com/maps/search/${encodeURIComponent(q2)}`)} style={{ background: T.card, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "10px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}><Ico n={ic} s={13} /> {l}</button>)}
       </div>
-    </div>
+    </div>}
   </div>);
 }
 
