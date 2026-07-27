@@ -302,9 +302,24 @@ async function leerVoucherIA(file) {
     return m ? JSON.parse(m[0]) : null;
   } catch (e) { throw new Error(e && e.message ? e.message : "No pude leer el pasaje."); }
 }
+async function leerReservaIA(file) {
+  try {
+    const esPdf = file.type === "application/pdf";
+    const blob = esPdf ? file : await comprimirFoto(file);
+    const data = await archivoABase64(blob);
+    const bloque = esPdf
+      ? { type: "document", source: { type: "base64", media_type: "application/pdf", data } }
+      : { type: "image", source: { type: "base64", media_type: "image/jpeg", data } };
+    const sys = "Sos un asistente que lee confirmaciones de reserva: hoteles, alquiler de auto, actividades y paseos, de cualquier plataforma (Booking, Despegar, Airbnb, Civitatis, GetYourGuide, lo que sea). Extraés los datos exactos del documento. Respondés SOLO un JSON válido, sin texto adicional ni markdown.";
+    const prompt = `Leé esta confirmación de reserva y extraé: qué tipo es ("hospedaje", "auto", "actividad" u "otro"), el nombre del lugar/proveedor (hotel, empresa de alquiler, la actividad), la dirección o lugar, la fecha de inicio, la fecha de fin (si es hospedaje o alquiler de auto — dejá "" si no aplica, como en una actividad de un solo día), el número de reserva/confirmación, y una descripción breve (qué incluye, tipo de habitación o auto, horario, lo que sirva saber de un vistazo).\n\nRespondé SOLO este JSON (dejá "" en lo que no encuentres):\n{"tipo":"hospedaje","nombre":"","lugar":"","fechaDesde":"AAAA-MM-DD","fechaHasta":"AAAA-MM-DD","numeroReserva":"","descripcion":""}`;
+    const resp = await llamarIA([{ role: "user", content: [bloque, { type: "text", text: prompt }] }], sys, 700);
+    const m = resp.match(/\{[\s\S]*\}/);
+    return m ? JSON.parse(m[0]) : null;
+  } catch (e) { throw new Error(e && e.message ? e.message : "No pude leer la reserva."); }
+}
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.43 · 26 jul 2026";
+const APP_VER = "v10.44 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1315,6 +1330,115 @@ function PanelHorarioVuelo({ viaje, vuelo, actualizar, cfg }) {
   </div>);
 }
 
+const TIPOS_RESERVA = { hospedaje: ["cama", "Hospedaje"], auto: ["auto", "Auto"], actividad: ["ticket", "Actividad"], otro: ["tarjeta", "Otro"] };
+
+function ReservasGuardadas({ viaje, actualizar, media }) {
+  const [form, setForm] = useState(null);
+  const [leyendoIA, setLeyendoIA] = useState(false);
+  const fileRef = useRef(null);
+  const fileRef2 = useRef(null);
+  const reservas = viaje.reservas || [];
+  const IN = { flex: 1, minWidth: 0, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "9px 10px", fontSize: 12.5, color: T.text, outline: "none", boxSizing: "border-box" };
+
+  function baseForm(archivo) {
+    return { tipo: "hospedaje", nombre: "", lugar: "", fechaDesde: "", fechaHasta: "", numeroReserva: "", descripcion: "", archivo: archivo || null };
+  }
+  async function procesarArchivo(f) {
+    if (!f) return;
+    setForm(prev => ({ ...(prev || baseForm(null)), archivo: f }));
+    setLeyendoIA(true);
+    let datos = null, error = "";
+    try { datos = await leerReservaIA(f); } catch (e) { error = e.message || "No pude leer la reserva."; }
+    setLeyendoIA(false);
+    if (!datos) { alert(`${error || "No encontré los datos en la imagen."}\n\nLa foto/PDF ya quedó adjunta igual — completá los campos a mano.`); return; }
+    setForm(prev => prev ? {
+      ...prev,
+      tipo: (datos.tipo && TIPOS_RESERVA[datos.tipo]) ? datos.tipo : prev.tipo,
+      nombre: datos.nombre || prev.nombre,
+      lugar: datos.lugar || prev.lugar,
+      fechaDesde: datos.fechaDesde || prev.fechaDesde,
+      fechaHasta: datos.fechaHasta || prev.fechaHasta,
+      numeroReserva: datos.numeroReserva || prev.numeroReserva,
+      descripcion: datos.descripcion || prev.descripcion,
+    } : prev);
+  }
+  async function guardar() {
+    if (!form.archivo && !form.nombre.trim()) { alert("Adjuntá el voucher, o cargá al menos el nombre del lugar."); return; }
+    let docId = null;
+    if (form.archivo) {
+      const f = form.archivo; const esPdf = f.type === "application/pdf";
+      const blob = esPdf ? f : await comprimirFoto(f);
+      docId = uid();
+      try { await mediaGuardar({ id: docId, viajeId: viaje.id, tipo: esPdf ? "documento" : "foto", blob, nombre: f.name, ts: Date.now() }); }
+      catch { docId = null; alert("No pude guardar el archivo adjunto (¿sin espacio en el teléfono?)."); }
+    }
+    const reserva = { id: uid(), tipo: form.tipo, nombre: form.nombre.trim(), lugar: form.lugar.trim(), fechaDesde: form.fechaDesde, fechaHasta: form.fechaHasta, numeroReserva: form.numeroReserva.trim(), descripcion: form.descripcion.trim(), docId };
+    actualizar({ ...viaje, reservas: [...reservas, reserva] });
+    setForm(null);
+  }
+  function borrar(id) {
+    const r = reservas.find(x => x.id === id);
+    if (r?.docId) mediaBorrar(r.docId);
+    actualizar({ ...viaje, reservas: reservas.filter(x => x.id !== id) });
+  }
+  function verDoc(docId) {
+    const m = (media || []).find(x => x.id === docId);
+    if (!m) { alert("No encuentro el archivo adjunto."); return; }
+    window.open(URL.createObjectURL(m.blob), "_blank");
+  }
+
+  return (<div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 14 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
+      <div style={{ flex: 1, fontSize: 13, fontWeight: 800, color: T.text, display: "flex", alignItems: "center", gap: 7 }}><Ico n="cama" s={15} c={T.accent} /> Reservas del viaje</div>
+      {!form && <button onClick={() => fileRef.current?.click()} style={{ background: "rgba(232,163,61,.12)", border: `1px solid ${T.accent}`, color: T.accent, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>＋ Agregar</button>}
+    </div>
+    <input ref={fileRef} type="file" accept="image/*,application/pdf" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) procesarArchivo(f); }} style={{ display: "none" }} />
+    {!form && <div style={{ textAlign: "center" }}><button onClick={() => setForm(baseForm(null))} style={{ background: "none", border: "none", color: T.muted, fontSize: 10.5, cursor: "pointer", padding: 4, marginTop: reservas.length ? 4 : 0 }}>o cargar los datos a mano, sin adjuntar nada</button></div>}
+
+    {reservas.length === 0 && !form && <div style={{ fontSize: 11.5, color: T.sub, lineHeight: 1.5, marginTop: 4 }}>Cada vez que reserven algo — hotel en Booking, auto, una excursión — cargá el voucher acá. Queda todo junto, a mano, con o sin señal.</div>}
+
+    {reservas.map(r => { const [ic, etiqueta] = TIPOS_RESERVA[r.tipo] || TIPOS_RESERVA.otro; return (<div key={r.id} style={{ background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 7 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".06em", display: "flex", alignItems: "center", gap: 5, marginBottom: 2 }}><Ico n={ic} s={11} /> {etiqueta}</div>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: T.text }}>{r.nombre || "Reserva"}</div>
+          {r.lugar && <div style={{ fontSize: 11, color: T.sub, marginTop: 1 }}>{r.lugar}</div>}
+          <div style={{ fontSize: 11, color: T.sub }}>{r.fechaDesde ? fFecha(r.fechaDesde) : ""}{r.fechaHasta && r.fechaHasta !== r.fechaDesde ? ` – ${fFecha(r.fechaHasta)}` : ""}</div>
+          {r.numeroReserva && <div style={{ fontSize: 10.5, color: T.muted, marginTop: 2 }}>Reserva N° {r.numeroReserva}</div>}
+          {r.descripcion && <div style={{ fontSize: 11, color: T.sub, lineHeight: 1.4, marginTop: 3 }}>{r.descripcion}</div>}
+        </div>
+        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          {r.docId && <button onClick={() => verDoc(r.docId)} style={{ background: T.accent, border: "none", color: "#1a1205", borderRadius: 8, padding: "7px 10px", fontSize: 10.5, fontWeight: 800, cursor: "pointer" }}>Ver voucher</button>}
+          <button onClick={() => borrar(r.id)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="tacho" s={13} /></button>
+        </div>
+      </div>
+    </div>); })}
+
+    {form && <div style={{ marginTop: 6 }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 9 }}>
+        {Object.entries(TIPOS_RESERVA).map(([k, [ic, l]]) => <button key={k} onClick={() => setForm({ ...form, tipo: k })} style={{ background: form.tipo === k ? "rgba(232,163,61,.15)" : T.card2, border: `1px solid ${form.tipo === k ? T.accent : T.border}`, color: form.tipo === k ? T.accent : T.sub, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}><Ico n={ic} s={12} /> {l}</button>)}
+      </div>
+      <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} placeholder="Nombre (hotel, empresa, actividad)" style={{ ...IN, width: "100%", marginBottom: 7, boxSizing: "border-box" }} />
+      <input value={form.lugar} onChange={e => setForm({ ...form, lugar: e.target.value })} placeholder="Lugar / dirección" style={{ ...IN, width: "100%", marginBottom: 7, boxSizing: "border-box" }} />
+      <div style={{ display: "flex", gap: 7, marginBottom: 7 }}>
+        <input type="date" value={form.fechaDesde} onChange={e => setForm({ ...form, fechaDesde: e.target.value })} style={{ ...IN, colorScheme: "dark" }} />
+        <input type="date" value={form.fechaHasta} onChange={e => setForm({ ...form, fechaHasta: e.target.value })} style={{ ...IN, colorScheme: "dark" }} />
+      </div>
+      <input value={form.numeroReserva} onChange={e => setForm({ ...form, numeroReserva: e.target.value })} placeholder="N° de reserva / confirmación" style={{ ...IN, width: "100%", marginBottom: 7, boxSizing: "border-box" }} />
+      <textarea value={form.descripcion} onChange={e => setForm({ ...form, descripcion: e.target.value })} rows={2} placeholder="Descripción (qué incluye, tipo de habitación, horario…)" style={{ ...IN, width: "100%", marginBottom: 9, boxSizing: "border-box", fontFamily: "inherit", resize: "vertical" }} />
+
+      <button onClick={() => fileRef2.current?.click()} style={{ width: "100%", background: form.archivo ? "rgba(61,214,140,.1)" : T.card2, border: `1.5px dashed ${form.archivo ? T.ok : T.border}`, color: form.archivo ? T.ok : T.text, borderRadius: 10, padding: "11px", fontSize: 12, fontWeight: 700, cursor: "pointer", marginBottom: 9 }}><Ico n={form.archivo ? "check" : "cam"} s={14} c={form.archivo ? T.ok : T.accent} /> {form.archivo ? `Adjunto: ${form.archivo.name}` : "Adjuntar el voucher (foto o PDF)"}</button>
+      <input ref={fileRef2} type="file" accept="image/*,application/pdf" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) procesarArchivo(f); }} style={{ display: "none" }} />
+      {leyendoIA && <div style={{ fontSize: 11.5, color: T.accent, marginTop: -3, marginBottom: 9, display: "flex", alignItems: "center", gap: 6 }}><Ico n="varita" s={12} /> Leyendo la reserva con IA…</div>}
+
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={() => setForm(null)} style={{ flex: 1, background: "none", border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "11px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Cancelar</button>
+        <button onClick={guardar} style={{ flex: 2, background: T.accent, border: "none", color: "#1a1205", borderRadius: 9, padding: "11px", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>Guardar reserva</button>
+      </div>
+    </div>}
+  </div>);
+}
+
 function VuelosGuardados({ viaje, actualizar, media, cfg }) {
   const puntos = viaje.puntos || [];   // (bug corregido: antes esta variable no existía acá)
   const [form, setForm] = useState(null);
@@ -1501,6 +1625,7 @@ function ReservasTab({ viaje, actualizar, media, cfg }) {
 
   return (<div>
     <VuelosGuardados viaje={viaje} actualizar={actualizar} media={media} cfg={cfg} />
+    <ReservasGuardadas viaje={viaje} actualizar={actualizar} media={media} />
 
     {/* Viaje recién creado, sin destino todavía: buscador con geocode real,
         que además suma el punto al viaje (así Clima, mapa y bitácora
@@ -2162,10 +2287,13 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
             {puntos.length > 0 && !plannerAbierto && <button onClick={() => setPlannerAbierto(true)} style={{ background: "rgba(232,163,61,.12)", border: `1px solid ${T.accent}`, color: T.accent, borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 800, cursor: "pointer", flexShrink: 0 }}><Ico n="varita" s={12} /> Rehacer con IA</button>}
           </div>
           <div style={{ fontSize: 11.5, color: T.sub, lineHeight: 1.5, marginBottom: 10 }}>Tocá cualquier parada para ver hospedaje y turismo de ESE lugar — no solo del destino final.</div>
-          {puntos.map((p, i) => { const abierto = puntoAbierto === i; return (<div key={i} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.rsm, marginBottom: 7, overflow: "hidden" }}>
+          {puntos.map((p, i) => { const abierto = puntoAbierto === i; const nombreCorto = p.nombre.split(",")[0].trim().toLowerCase();
+            const tieneReserva = (viaje.reservas || []).some(r => r.lugar && r.lugar.toLowerCase().includes(nombreCorto)) || (viaje.vuelos || []).some(v2 => (v2.destino || "").toLowerCase().includes(nombreCorto) || (v2.origen || "").toLowerCase().includes(nombreCorto));
+            return (<div key={i} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.rsm, marginBottom: 7, overflow: "hidden" }}>
             <div onClick={() => setPuntoAbierto(abierto ? null : i)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "11px 12px", cursor: "pointer" }}>
               <div style={{ width: 26, height: 26, borderRadius: "50%", background: i === 0 ? T.ok : i === puntos.length - 1 ? T.danger : T.accent2, color: "#fff", fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i === 0 ? "A" : i === puntos.length - 1 ? "B" : i}</div>
               <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: T.text, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.nombre.split(",").slice(0, 2).join(",")}</div>
+              {tieneReserva && <span title="Ya tiene una reserva cargada" style={{ display: "flex", alignItems: "center", flexShrink: 0 }}><Ico n="check" s={13} c={T.ok} /></span>}
               <span style={{ fontSize: 10, color: T.muted }}>{abierto ? "▲" : "▼"}</span>
               {i > 0 && i < puntos.length - 1 && <>
                 <button onClick={(e) => { e.stopPropagation(); mover(i, -1); }} style={{ background: "none", border: "none", color: T.sub, cursor: "pointer", padding: 3 }}><Ico n="subir" s={15} /></button>
