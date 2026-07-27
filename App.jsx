@@ -304,7 +304,7 @@ async function leerVoucherIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.39 · 26 jul 2026";
+const APP_VER = "v10.40 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1750,11 +1750,12 @@ function HospedajeLinks({ lugar, f }) {
    Le decís a dónde, desde dónde y cuántos días. La IA lee tu perfil viajero
    (¿aman manejar? ¿ritmo relajado? ¿pueblitos y vino?) y arma el itinerario
    que USTEDES harían: las paradas caen al mapa listas, con sus porqués. */
-function PlannerIA({ viaje, actualizar, perfil }) {
+function PlannerIA({ viaje, actualizar, perfil, cfg }) {
   const [destino, setDestino] = useState("");
-  const [desde, setDesde] = useState("Buenos Aires, Argentina");
+  const [desde, setDesde] = useState(cfg?.casa?.nombre || "Buenos Aires, Argentina");
   const [dias, setDias] = useState(viaje.diasVacaciones || "14");
   const [armando, setArmando] = useState(false);
+  const [cambiarDesde, setCambiarDesde] = useState(!cfg?.casa);   // si hay Mi Casa, arranca sin pedir nada
 
   async function armar() {
     if (!destino.trim()) { alert("Decime a dónde quieren ir."); return; }
@@ -1785,8 +1786,11 @@ function PlannerIA({ viaje, actualizar, perfil }) {
     <input value={destino} onChange={e => setDestino(e.target.value)} placeholder="Italia · Jujuy · Costa de Brasil · donde sea"
       style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "13px 14px", fontSize: 14.5, color: T.text, outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-      <input value={desde} onChange={e => setDesde(e.target.value)} placeholder="¿Desde dónde salen?"
+      {cambiarDesde ? <input value={desde} onChange={e => setDesde(e.target.value)} placeholder="¿Desde dónde salen?"
         style={{ flex: 1, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: T.text, outline: "none", minWidth: 0 }} />
+        : <div onClick={() => setCambiarDesde(true)} style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "0 12px", fontSize: 12.5, color: T.sub, cursor: "pointer", minWidth: 0 }}>
+          <Ico n="pin" s={12} c={T.accent} /> <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Salen desde {desde.split(",")[0]}</span>
+        </div>}
       <input value={dias} onChange={e => setDias(e.target.value)} inputMode="numeric" placeholder="días"
         style={{ width: 70, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px", fontSize: 13, color: T.text, outline: "none", textAlign: "center" }} />
     </div>
@@ -2093,7 +2097,7 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
       <UpdateBanner />
       <BarraViaje viaje={viaje} actualizar={actualizar} />
 
-      {tab === "ruta" && (puntos.length === 0 || plannerAbierto) && <PlannerIA viaje={viaje} actualizar={(v2) => { actualizar(v2); setPlannerAbierto(false); }} perfil={perfil} />}
+      {tab === "ruta" && (puntos.length === 0 || plannerAbierto) && <PlannerIA viaje={viaje} actualizar={(v2) => { actualizar(v2); setPlannerAbierto(false); }} perfil={perfil} cfg={cfg} />}
       {tab === "ruta" && viaje.atraccionPrincipal && <div style={{ background: "linear-gradient(135deg, rgba(232,163,61,.14), rgba(77,163,255,.08))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: "12px 14px", marginBottom: 14, display: "flex", gap: 10, alignItems: "flex-start" }}>
         <Ico n="estrella" s={17} c={T.accent} />
         <div><div style={{ fontSize: 10.5, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 3 }}>Lo imperdible de este viaje</div>
@@ -2278,7 +2282,7 @@ function ChatIdeas({ cfg, viajes, onCrearViaje }) {
       if (!datos || !datos.elegido || !datos.destino) { alert("Todavía no veo un destino elegido en la charla — decime cuál les gustó y lo armo."); setArmando(false); return; }
 
       const perfil = perfilTexto(cfg);
-      const destino = datos.destino, desde = datos.desde || "Buenos Aires, Argentina", dias = datos.dias || 7;
+      const destino = datos.destino, desde = datos.desde || cfg?.casa?.nombre || "Buenos Aires, Argentina", dias = datos.dias || 7;
       const sys = "Sos un planificador de viajes de primer nivel, con conocimiento profundo del mundo. Respondés SOLO con JSON válido, sin texto adicional ni markdown.";
       const prompt = `${perfil ? `ASÍ VIAJA ESTA GENTE (armá el itinerario exactamente para ellos): ${perfil}\n\n` : ""}Quieren viajar a: ${destino}\nSalen desde: ${desde}\nDías disponibles: ${dias}\n\nANTES de armar nada, pensá: ¿qué es lo que hace FAMOSO a este destino — lo principal, lo que nadie que va ahí se puede perder? Ejemplos de cómo pensarlo: Egipto → las pirámides de Giza y el Nilo. Mendoza → la Ruta del Vino y las bodegas. Santiago de Compostela → el Camino de Santiago. Cusco → Machu Picchu y el Camino Inca. Orlando → los parques Disney. Alemania, según la ciudad → historia (Berlín: el Muro; Múnich: la Oktoberfest). Si esa atracción central es EN SÍ un recorrido de varios días (un camino de peregrinación, una ruta del vino, la Ruta 40), las paradas del itinerario tienen que ser LAS ETAPAS de ese recorrido — pueblos y tramos en orden — no una ciudad genérica con noches sueltas. Si es un sitio puntual (pirámides, un parque, una torre), asegurate de que al menos una parada esté dedicada explícitamente a eso, con el "por_que" explicando por qué es lo imperdible. Armá el MEJOR itinerario posible para ellos: el orden de lugares, cuántas noches en cada uno, y por qué cada lugar es para ELLOS. Si aman manejar, roadtrip con rutas lindas; si no, ciudades base y traslados cómodos. Si el destino requiere avión desde el origen, la primera parada es la ciudad de llegada.\n\nRespondé SOLO este JSON:\n{"nombre_viaje":"...","atraccion_principal":"1 frase: lo imperdible de este viaje y por qué armamos el recorrido así","paradas":[{"nombre":"Ciudad o lugar","pais_o_provincia":"...","noches":2,"por_que":"1 frase pensada para ellos, conectada con lo imperdible del lugar","lat":-00.0000,"lon":-00.0000}]}`;
       const resp = await llamarIA([{ role: "user", content: prompt }], sys, 3000);
@@ -2318,7 +2322,7 @@ function ChatIdeas({ cfg, viajes, onCrearViaje }) {
       const perfil = perfilTexto(cfg);
       const hechos = (viajes || []).map(v2 => { const o = v2.puntos?.[0]?.nombre?.split(",")[0]; const d = v2.puntos?.length > 1 ? v2.puntos[v2.puntos.length - 1].nombre.split(",")[0] : null; return d ? `${v2.nombre} (${o} → ${d})` : v2.nombre; }).join("; ");
       const hoy = new Date().toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" });
-      const sys = `Sos el copiloto de ideas de la app Mis Viajes: un amigo viajado que ayuda a elegir el PRÓXIMO destino. Hoy es ${hoy} (tené en cuenta la estación y la época del año). Contestás en voseo, cálido y concreto.${perfil ? ` Así viaja esta gente (planificá SIEMPRE para ellos): ${perfil}.` : ""}${hechos ? ` Viajes que ya tienen en la app (evitá repetirlos salvo que pidan volver): ${hechos}.` : ""} Cuando recomiendes destinos: da 2 o 3 opciones concretas con el porqué pensado para ellos (qué comer, qué ver, cuántos km o cómo llegar). Si falta un dato clave (días, época, desde dónde), preguntalo corto. Cuando ya hayan elegido UN destino concreto (no antes), decíselos: que toquen el botón "Armar este viaje ahora" acá abajo y arma todo solo, con hospedaje incluido.`;
+      const sys = `Sos el copiloto de ideas de la app Mis Viajes: un amigo viajado que ayuda a elegir el PRÓXIMO destino. Hoy es ${hoy} (tené en cuenta la estación y la época del año). Contestás en voseo, cálido y concreto.${perfil ? ` Así viaja esta gente (planificá SIEMPRE para ellos): ${perfil}.` : ""}${cfg?.casa ? ` Salen siempre desde: ${cfg.casa.nombre} (es de dónde parte cualquier viaje que armes — NUNCA preguntes de dónde salen, ya lo sabés).` : ""}${hechos ? ` Viajes que ya tienen en la app (evitá repetirlos salvo que pidan volver): ${hechos}.` : ""} Cuando recomiendes destinos: da 2 o 3 opciones concretas con el porqué pensado para ellos (qué comer, qué ver, cuántos km o cómo llegar). Si falta un dato clave (días, época — nunca el origen si ya lo sabés), preguntalo corto. Cuando ya hayan elegido UN destino concreto (no antes), decíselos: que toquen el botón "Armar este viaje ahora" acá abajo y arma todo solo, con hospedaje incluido.`;
       const resp = await llamarIA(nuevos.slice(-12), sys, 1600);
       setMsgs(prev => [...prev, { role: "assistant", content: resp }]);
       if (porVozRef.current) { porVozRef.current = false; hablarTexto(resp); }
