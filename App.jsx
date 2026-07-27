@@ -269,7 +269,7 @@ async function dondeEstoy() {
 const extraerJSON = (t) => { const m = t.match(/\[[\s\S]*\]/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.24 · 26 jul 2026";
+const APP_VER = "v10.25 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1033,16 +1033,23 @@ const AEROLINEAS_POR_REGION = {
   ]},
 };
 function VuelosGuardados({ viaje, actualizar, media }) {
+  const puntos = viaje.puntos || [];   // (bug corregido: antes esta variable no existía acá)
   const [form, setForm] = useState(null);
-  const fileRef = useRef(null);
+  const fileRef = useRef(null);        // botón "＋ Agregar": va directo a Fotos/Archivos
+  const fileRef2 = useRef(null);       // dentro del formulario, para cambiar el adjunto
   const vuelos = viaje.vuelos || [];
   const IN = { flex: 1, minWidth: 0, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "9px 10px", fontSize: 12.5, color: T.text, outline: "none", boxSizing: "border-box" };
 
-  function nuevoForm() {
-    setForm({ aerolinea: "", numero: "", fecha: "", horaSalida: "", horaLlegada: "", origen: puntos[0]?.nombre?.split(",")[0] || "", destino: puntos[puntos.length - 1]?.nombre?.split(",")[0] || "", archivo: null });
+  function baseForm(archivo) {
+    return { aerolinea: "", numero: "", fecha: "", horaSalida: "", horaLlegada: "", origen: puntos[0]?.nombre?.split(",")[0] || "", destino: puntos[puntos.length - 1]?.nombre?.split(",")[0] || "", archivo: archivo || null };
+  }
+  function onElegirVoucher(e) {
+    const f = e.target.files?.[0]; e.target.value = "";
+    if (!f) return;
+    setForm(baseForm(f));   // el adjunto ya queda cargado; el resto se completa después, es opcional
   }
   async function guardar() {
-    if (!form.aerolinea.trim() && !form.numero.trim()) { alert("Cargá al menos la aerolínea o el número de vuelo."); return; }
+    if (!form.archivo && !form.aerolinea.trim() && !form.numero.trim()) { alert("Adjuntá el pasaje, o cargá al menos la aerolínea o el número de vuelo."); return; }
     let docId = null;
     if (form.archivo) {
       const f = form.archivo; const esPdf = f.type === "application/pdf";
@@ -1069,8 +1076,10 @@ function VuelosGuardados({ viaje, actualizar, media }) {
   return (<div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 14 }}>
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
       <div style={{ flex: 1, fontSize: 13, fontWeight: 800, color: T.text, display: "flex", alignItems: "center", gap: 7 }}><Ico n="avion" s={15} c={T.accent} /> Vuelos ya comprados</div>
-      {!form && <button onClick={nuevoForm} style={{ background: "rgba(232,163,61,.12)", border: `1px solid ${T.accent}`, color: T.accent, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>＋ Agregar</button>}
+      {!form && <button onClick={() => fileRef.current?.click()} style={{ background: "rgba(232,163,61,.12)", border: `1px solid ${T.accent}`, color: T.accent, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>＋ Agregar</button>}
     </div>
+    <input ref={fileRef} type="file" accept="image/*,application/pdf" onChange={onElegirVoucher} style={{ display: "none" }} />
+    {!form && <div style={{ textAlign: "center" }}><button onClick={() => setForm(baseForm(null))} style={{ background: "none", border: "none", color: T.muted, fontSize: 10.5, cursor: "pointer", padding: 4, marginTop: vuelos.length ? 4 : 0 }}>o cargar los datos a mano, sin adjuntar nada</button></div>}
     {vuelos.length === 0 && !form && <div style={{ fontSize: 11.5, color: T.sub, lineHeight: 1.5 }}>Si ya tienen el pasaje sacado en otro lado, cargá el número de vuelo, el horario, y adjuntá el boarding pass — queda a mano en el viaje, sin necesitar señal.</div>}
     {vuelos.map(v2 => (<div key={v2.id} style={{ background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 7 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
@@ -1099,8 +1108,8 @@ function VuelosGuardados({ viaje, actualizar, media }) {
         <input type="time" value={form.horaSalida} onChange={e => setForm({ ...form, horaSalida: e.target.value })} placeholder="Sale" style={{ ...IN, colorScheme: "dark" }} />
         <input type="time" value={form.horaLlegada} onChange={e => setForm({ ...form, horaLlegada: e.target.value })} placeholder="Llega" style={{ ...IN, colorScheme: "dark" }} />
       </div>
-      <button onClick={() => fileRef.current?.click()} style={{ width: "100%", background: T.card2, border: `1.5px dashed ${T.border}`, color: T.text, borderRadius: 10, padding: "11px", fontSize: 12, fontWeight: 700, cursor: "pointer", marginBottom: 9 }}><Ico n="cam" s={14} c={T.accent} /> {form.archivo ? form.archivo.name : "Adjuntar boarding pass / pasaje (foto o PDF)"}</button>
-      <input ref={fileRef} type="file" accept="image/*,application/pdf" onChange={e => setForm({ ...form, archivo: e.target.files[0] || null })} style={{ display: "none" }} />
+      <button onClick={() => fileRef2.current?.click()} style={{ width: "100%", background: form.archivo ? "rgba(61,214,140,.1)" : T.card2, border: `1.5px dashed ${form.archivo ? T.ok : T.border}`, color: form.archivo ? T.ok : T.text, borderRadius: 10, padding: "11px", fontSize: 12, fontWeight: 700, cursor: "pointer", marginBottom: 9 }}><Ico n={form.archivo ? "check" : "cam"} s={14} c={form.archivo ? T.ok : T.accent} /> {form.archivo ? `Adjunto: ${form.archivo.name}` : "Adjuntar boarding pass / pasaje (foto o PDF)"}</button>
+      <input ref={fileRef2} type="file" accept="image/*,application/pdf" onChange={e => setForm({ ...form, archivo: e.target.files[0] || form.archivo })} style={{ display: "none" }} />
       <div style={{ display: "flex", gap: 8 }}>
         <button onClick={() => setForm(null)} style={{ flex: 1, background: "none", border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "11px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Cancelar</button>
         <button onClick={guardar} style={{ flex: 2, background: T.accent, border: "none", color: "#1a1205", borderRadius: 9, padding: "11px", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>Guardar vuelo</button>
