@@ -224,14 +224,14 @@ async function fetchConLimite(url, opciones, limiteMs) {
 async function llamarIA(messages, system, maxTokens = 2500) {
   const body = JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, system, messages });
   let j = null;
-  try { const r = await fetchConLimite("/api/claude", { method: "POST", headers: { "Content-Type": "application/json" }, body }, 25000); j = await r.json(); } catch { j = null; }
+  try { const r = await fetchConLimite("/api/claude", { method: "POST", headers: { "Content-Type": "application/json" }, body }, 35000); j = await r.json(); } catch { j = null; }
   if (!j || j.error) {
     // vista previa (artefacto): la API se llama directo, sin clave. En
     // producción esta vía normalmente no sirve (sin clave del lado del
     // navegador) — por eso va con su propio límite de tiempo y try/catch,
     // para que si falla, falle rápido y avise, en vez de quedar colgada.
     try {
-      const r2 = await fetchConLimite("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body }, 12000);
+      const r2 = await fetchConLimite("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body }, 15000);
       j = await r2.json();
     } catch { throw new Error("No pude conectar con la IA (revisá la conexión y probá de nuevo)."); }
   }
@@ -319,7 +319,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.47 · 26 jul 2026";
+const APP_VER = "v10.48 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
