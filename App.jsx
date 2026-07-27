@@ -284,7 +284,7 @@ async function leerVoucherIA(file) {
       ? { type: "document", source: { type: "base64", media_type: "application/pdf", data } }
       : { type: "image", source: { type: "base64", media_type: "image/jpeg", data } };
     const sys = "Sos un asistente que lee boarding passes, pasajes aéreos y confirmaciones de reserva. Extraés los datos exactos del documento. Respondés SOLO un JSON válido, sin texto adicional ni markdown.";
-    const prompt = `Leé este pasaje/boarding pass y extraé: aerolínea, número de vuelo, fecha del vuelo, hora de salida, hora de llegada, ciudad u aeropuerto de origen, ciudad u aeropuerto de destino.\n\nRespondé SOLO este JSON (dejá "" en lo que no encuentres en el documento):\n{"aerolinea":"","numero":"","fecha":"AAAA-MM-DD","horaSalida":"HH:MM","horaLlegada":"HH:MM","origen":"","destino":""}`;
+    const prompt = `Leé este pasaje/boarding pass y extraé: aerolínea, número de vuelo, fecha del vuelo, hora de salida, hora de llegada, ciudad de origen, ciudad de destino, y el NOMBRE COMPLETO del aeropuerto de salida si figura (ej: "Aeropuerto Internacional Ministro Pistarini" o "Aeroparque Jorge Newbery" o el código IATA como "EZE"/"AEP").\n\nRespondé SOLO este JSON (dejá "" en lo que no encuentres en el documento):\n{"aerolinea":"","numero":"","fecha":"AAAA-MM-DD","horaSalida":"HH:MM","horaLlegada":"HH:MM","origen":"","destino":"","aeropuertoOrigen":""}`;
     const resp = await llamarIA([{ role: "user", content: [bloque, { type: "text", text: prompt }] }], sys, 700);
     const m = resp.match(/\{[\s\S]*\}/);
     return m ? JSON.parse(m[0]) : null;
@@ -292,7 +292,7 @@ async function leerVoucherIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.26 · 26 jul 2026";
+const APP_VER = "v10.27 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1055,6 +1055,108 @@ const AEROLINEAS_POR_REGION = {
     ["Turkish Airlines", "#C50034", "https://www.turkishairlines.com/es-ar/"],
   ]},
 };
+function actualizarVuelo(viaje, vueloId, patch) {
+  return { ...viaje, vuelos: (viaje.vuelos || []).map(v2 => v2.id === vueloId ? { ...v2, ...patch } : v2) };
+}
+function pad2(n) { return String(n).padStart(2, "0"); }
+function fechaICS(d) { return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}T${pad2(d.getHours())}${pad2(d.getMinutes())}00`; }
+
+function PanelHorarioVuelo({ viaje, vuelo, actualizar }) {
+  const [abierto, setAbierto] = useState(false);
+  const [buscando, setBuscando] = useState(false);
+  const [calculando, setCalculando] = useState(false);
+  const [ruta, setRuta] = useState(null);
+  const [aeropuerto, setAeropuerto] = useState(null);
+  const [error, setError] = useState("");
+  const [buscarDir, setBuscarDir] = useState(false);
+  const origenCasa = vuelo.origenCasa || null;
+  const internacional = !!vuelo.internacional;
+
+  async function usarGPS() {
+    setBuscando(true);
+    try { const l = await dondeEstoy(); actualizar(actualizarVuelo(viaje, vuelo.id, { origenCasa: l })); setRuta(null); }
+    catch (e) { alert(e.message); }
+    setBuscando(false);
+  }
+  async function calcular() {
+    if (!origenCasa) { alert("Decime desde dónde salen: GPS o buscá la dirección."); return; }
+    if (!vuelo.fecha || !vuelo.horaSalida) { alert("A este vuelo le falta la fecha o la hora de salida — completala arriba primero."); return; }
+    setCalculando(true); setError("");
+    try {
+      const query = vuelo.aeropuertoOrigen || `Aeropuerto ${vuelo.origen}`;
+      const res = await geocodificar(query);
+      const aero = res && res[0];
+      if (!aero) { setError("No encontré el aeropuerto solo. Escribí el nombre exacto en \"Aeropuerto\" arriba del vuelo y probá de nuevo."); setCalculando(false); return; }
+      setAeropuerto(aero);
+      const r = await calcularRuta([origenCasa, aero]);
+      if (!r) { setError("No pude calcular una ruta en auto hasta ahí."); setCalculando(false); return; }
+      setRuta(r);
+    } catch { setError("No pude calcular la ruta. Revisá la conexión y probá de nuevo."); }
+    setCalculando(false);
+  }
+
+  const anticipacionMin = internacional ? 180 : 120;
+  const margenMin = 15;
+  let horaSalirTxt = null, fechaSalir = null, minutosViaje = null;
+  if (ruta && vuelo.fecha && vuelo.horaSalida) {
+    minutosViaje = Math.ceil(ruta.dur / 60);
+    const salidaVuelo = new Date(`${vuelo.fecha}T${vuelo.horaSalida}:00`);
+    fechaSalir = new Date(salidaVuelo.getTime() - (minutosViaje + anticipacionMin + margenMin) * 60000);
+    horaSalirTxt = `${pad2(fechaSalir.getHours())}:${pad2(fechaSalir.getMinutes())}`;
+  }
+
+  function descargarRecordatorio() {
+    if (!fechaSalir) return;
+    const fin = new Date(fechaSalir.getTime() + 15 * 60000);
+    const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Mis Viajes//ES", "BEGIN:VEVENT",
+      `UID:${uid()}@misviajes`, `DTSTAMP:${fechaICS(new Date())}`, `DTSTART:${fechaICS(fechaSalir)}`, `DTEND:${fechaICS(fin)}`,
+      `SUMMARY:Salir al aeropuerto — vuelo ${vuelo.numero || ""} a ${vuelo.destino}`.trim(),
+      `DESCRIPTION:${(vuelo.aerolinea || "Vuelo")} ${vuelo.numero || ""} sale ${vuelo.horaSalida} desde ${vuelo.origen}. Salir ahora para llegar con tiempo (~${minutosViaje} min de viaje + ${anticipacionMin / 60}h de anticipación).`,
+      "BEGIN:VALARM", "ACTION:DISPLAY", "TRIGGER:-PT0M", "DESCRIPTION:Hora de salir al aeropuerto", "END:VALARM",
+      "BEGIN:VALARM", "ACTION:DISPLAY", "TRIGGER:-PT15M", "DESCRIPTION:Faltan 15 min para salir al aeropuerto", "END:VALARM",
+      "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+    const blob = new Blob([ics], { type: "text/calendar" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `salir-aeropuerto-${vuelo.numero || "vuelo"}.ics`; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  return (<div style={{ marginTop: 8 }}>
+    <button onClick={() => setAbierto(v2 => !v2)} style={{ width: "100%", background: horaSalirTxt ? "rgba(61,214,140,.08)" : T.card2, border: `1px solid ${horaSalirTxt ? T.ok : T.border}`, color: horaSalirTxt ? T.ok : T.sub, borderRadius: 9, padding: "8px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+      <Ico n="reloj" s={12} /> {horaSalirTxt ? `Salir de casa a las ${horaSalirTxt}` : "¿A qué hora salgo de casa?"}
+    </button>
+    {abierto && <div style={{ background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: 12, marginTop: 7 }}>
+      <div style={{ fontSize: 10.5, color: T.sub, marginBottom: 8 }}>¿Desde dónde salen hacia el aeropuerto?</div>
+      {origenCasa ? <div style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(232,163,61,.1)", border: `1px solid ${T.accent}`, borderRadius: 9, padding: "8px 10px", marginBottom: 9 }}>
+        <Ico n="pin" s={13} c={T.accent} />
+        <span style={{ flex: 1, fontSize: 12, color: T.text, fontWeight: 700 }}>{origenCasa.nombre.split(",").slice(0, 2).join(",")}</span>
+        <button onClick={() => { actualizar(actualizarVuelo(viaje, vuelo.id, { origenCasa: null })); setRuta(null); }} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="cerrar" s={10} /></button>
+      </div> : <div style={{ display: "flex", gap: 6, marginBottom: 9 }}>
+        <button onClick={usarGPS} disabled={buscando} style={{ flex: 1, background: T.card, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "9px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}><Ico n="pin" s={12} /> {buscando ? "Buscando…" : "Usar mi ubicación"}</button>
+        <button onClick={() => setBuscarDir(v2 => !v2)} style={{ flex: 1, background: T.card, border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "9px", fontSize: 11.5, cursor: "pointer" }}>Otra dirección</button>
+      </div>}
+      {buscarDir && !origenCasa && <div style={{ marginBottom: 9 }}><BuscarLugar placeholder="Dirección de salida…" onElegir={(r) => { actualizar(actualizarVuelo(viaje, vuelo.id, { origenCasa: r })); setBuscarDir(false); setRuta(null); }} /></div>}
+
+      <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, color: T.sub, marginBottom: 10, cursor: "pointer" }}>
+        <input type="checkbox" checked={internacional} onChange={e => { actualizar(actualizarVuelo(viaje, vuelo.id, { internacional: e.target.checked })); setRuta(null); }} />
+        Vuelo internacional (3 h de anticipación en vez de 2 h)
+      </label>
+
+      <button onClick={calcular} disabled={calculando || !origenCasa} style={{ width: "100%", background: calculando ? T.card : T.accent, border: "none", color: calculando ? T.sub : "#1a1205", borderRadius: 9, padding: "10px", fontSize: 12, fontWeight: 800, cursor: "pointer", marginBottom: 8 }}>{calculando ? "Calculando…" : "Calcular"}</button>
+      {error && <div style={{ fontSize: 11, color: T.danger, marginBottom: 8 }}>{error}</div>}
+
+      {horaSalirTxt && <>
+        <div style={{ background: "rgba(61,214,140,.08)", border: `1px solid ${T.ok}`, borderRadius: 9, padding: "10px 11px", marginBottom: 9 }}>
+          <div style={{ fontSize: 17, fontWeight: 800, color: T.ok }}>Salir a las {horaSalirTxt}</div>
+          <div style={{ fontSize: 10.5, color: T.sub, marginTop: 3, lineHeight: 1.5 }}>{aeropuerto?.nombre?.split(",").slice(0, 2).join(",")} está a ~{kmFmt(ruta.dist)} · {minutosViaje} min manejando + {anticipacionMin / 60} h de anticipación del vuelo + 15 min de margen.</div>
+        </div>
+        <button onClick={descargarRecordatorio} style={{ width: "100%", background: T.accent, border: "none", color: "#1a1205", borderRadius: 9, padding: "11px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}><Ico n="alerta" s={13} /> Agregar recordatorio con alarma</button>
+        <div style={{ fontSize: 10, color: T.muted, marginTop: 6, lineHeight: 1.4 }}>Se agrega al Calendario del teléfono, con alarma. Suena aunque la app esté cerrada — lo maneja el propio iPhone.</div>
+      </>}
+    </div>}
+  </div>);
+}
+
 function VuelosGuardados({ viaje, actualizar, media }) {
   const puntos = viaje.puntos || [];   // (bug corregido: antes esta variable no existía acá)
   const [form, setForm] = useState(null);
@@ -1065,7 +1167,7 @@ function VuelosGuardados({ viaje, actualizar, media }) {
 
   const [leyendoIA, setLeyendoIA] = useState(false);
   function baseForm(archivo) {
-    return { aerolinea: "", numero: "", fecha: "", horaSalida: "", horaLlegada: "", origen: puntos[0]?.nombre?.split(",")[0] || "", destino: puntos[puntos.length - 1]?.nombre?.split(",")[0] || "", archivo: archivo || null };
+    return { aerolinea: "", numero: "", fecha: "", horaSalida: "", horaLlegada: "", origen: puntos[0]?.nombre?.split(",")[0] || "", destino: puntos[puntos.length - 1]?.nombre?.split(",")[0] || "", aeropuertoOrigen: "", archivo: archivo || null };
   }
   // Un solo camino para "llegó un archivo nuevo": lo adjunta YA (no espera
   // a la IA para que se vea el avance) y en paralelo le pide a la IA que
@@ -1086,6 +1188,7 @@ function VuelosGuardados({ viaje, actualizar, media }) {
       horaLlegada: datos.horaLlegada || prev.horaLlegada,
       origen: datos.origen || prev.origen,
       destino: datos.destino || prev.destino,
+      aeropuertoOrigen: datos.aeropuertoOrigen || prev.aeropuertoOrigen || "",
     } : prev);
   }
   function onElegirVoucher(e) {
@@ -1102,7 +1205,7 @@ function VuelosGuardados({ viaje, actualizar, media }) {
       try { await mediaGuardar({ id: docId, viajeId: viaje.id, tipo: esPdf ? "documento" : "foto", blob, nombre: f.name, ts: Date.now() }); }
       catch { docId = null; alert("No pude guardar el archivo adjunto (¿sin espacio en el teléfono?)."); }
     }
-    const vuelo = { id: uid(), aerolinea: form.aerolinea.trim(), numero: form.numero.trim().toUpperCase(), fecha: form.fecha, horaSalida: form.horaSalida, horaLlegada: form.horaLlegada, origen: form.origen.trim(), destino: form.destino.trim(), docId };
+    const vuelo = { id: uid(), aerolinea: form.aerolinea.trim(), numero: form.numero.trim().toUpperCase(), fecha: form.fecha, horaSalida: form.horaSalida, horaLlegada: form.horaLlegada, origen: form.origen.trim(), destino: form.destino.trim(), aeropuertoOrigen: (form.aeropuertoOrigen || "").trim(), docId };
     actualizar({ ...viaje, vuelos: [...vuelos, vuelo] });
     setForm(null);
   }
@@ -1137,6 +1240,7 @@ function VuelosGuardados({ viaje, actualizar, media }) {
           <button onClick={() => borrar(v2.id)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="tacho" s={13} /></button>
         </div>
       </div>
+      <PanelHorarioVuelo viaje={viaje} vuelo={v2} actualizar={actualizar} />
     </div>))}
     {form && <div style={{ marginTop: 6 }}>
       <div style={{ display: "flex", gap: 7, marginBottom: 7 }}>
