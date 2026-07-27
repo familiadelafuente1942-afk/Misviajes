@@ -251,7 +251,7 @@ async function dondeEstoy() {
 const extraerJSON = (t) => { const m = t.match(/\[[\s\S]*\]/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.17 · 26 jul 2026";
+const APP_VER = "v10.18 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -446,12 +446,17 @@ function BuscarLugar({ placeholder, onElegir }) {
 }
 
 /* ── Cuenta regresiva / día del viaje ───────────────────────────── */
+function isoMasDiasSimple(iso, n) { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
 function BarraViaje({ viaje, actualizar }) {
   const [editando, setEditando] = useState(false);
   const hoy = hoyISO();
   const ini = viaje.fechaInicio, dias = Number(viaje.diasVacaciones) || 0;
   let linea = null;
-  if (ini && dias) {
+  if (viaje.vivido) {
+    // un viaje que ya pasó: nunca cuenta regresiva, siempre en pasado.
+    if (ini && dias > 1) { const finV = isoMasDiasSimple(ini, dias - 1); linea = { t: `Viajaron del ${fFecha(ini)} al ${fFecha(finV)} · ${dias} días`, c: T.sub }; }
+    else if (ini) linea = { t: `Viajaron el ${fFecha(ini)}`, c: T.sub };
+  } else if (ini && dias) {
     const d = diasEntre(ini, hoy);   // negativo = falta; 0 = hoy arranca
     if (d < 0) linea = { t: `Faltan ${-d} día${d === -1 ? "" : "s"} para salir`, c: T.accent2 };
     else if (d < dias) linea = { t: `Día ${d + 1} de ${dias} · quedan ${dias - d - 1} día${dias - d - 1 === 1 ? "" : "s"} de vacaciones`, c: T.ok };
@@ -462,16 +467,16 @@ function BarraViaje({ viaje, actualizar }) {
       <Ico n="cal" s={16} c={T.accent} />
       {linea
         ? <div style={{ flex: 1, fontSize: 13, fontWeight: 700, color: linea.c }}>{linea.t}</div>
-        : <div style={{ flex: 1, fontSize: 12.5, color: T.sub }}>¿Cuándo salís y cuántos días tenés?</div>}
+        : <div style={{ flex: 1, fontSize: 12.5, color: T.sub }}>{viaje.vivido ? "¿Cuándo fue este viaje?" : "¿Cuándo salís y cuántos días tenés?"}</div>}
       <button onClick={() => setEditando(v => !v)} style={{ background: "none", border: `1px solid ${T.border}`, color: T.sub, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{editando ? "Listo" : ini ? "Editar" : "Cargar"}</button>
     </div>
     {editando && <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 10.5, color: T.sub, marginBottom: 3 }}>Salida</div>
+        <div style={{ fontSize: 10.5, color: T.sub, marginBottom: 3 }}>{viaje.vivido ? "Salieron" : "Salida"}</div>
         <input type="date" value={ini || ""} onChange={e => actualizar({ ...viaje, fechaInicio: e.target.value })} style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "10px", fontSize: 13, color: T.text, colorScheme: "dark" }} />
       </div>
       <div style={{ width: 120 }}>
-        <div style={{ fontSize: 10.5, color: T.sub, marginBottom: 3 }}>Días de vacaciones</div>
+        <div style={{ fontSize: 10.5, color: T.sub, marginBottom: 3 }}>{viaje.vivido ? "Cuántos días" : "Días de vacaciones"}</div>
         <input type="number" value={viaje.diasVacaciones || ""} onChange={e => actualizar({ ...viaje, diasVacaciones: e.target.value })} placeholder="14" style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "10px", fontSize: 13, color: T.text }} />
       </div>
     </div>}
@@ -496,7 +501,14 @@ function Mini({ m, onBorrar, sel, onSel, tam = 92 }) {
 function Bitacora({ viaje, actualizar, media, recargarMedia }) {
   const fileRef = useRef(null);
   const [texto, setTexto] = useState("");
-  const [fecha, setFecha] = useState(hoyISO());
+  // Un viaje vivido no arranca en "hoy": arranca el día después de la última
+  // entrada que ya cargaron (o la fecha de inicio del viaje si es la primera).
+  const fechaSugerida = () => {
+    if (!viaje.vivido) return hoyISO();
+    const fechas = (viaje.bitacora || []).map(e => e.fecha).filter(Boolean).sort();
+    return fechas.length ? fechas[fechas.length - 1] : (viaje.fechaInicio || hoyISO());
+  };
+  const [fecha, setFecha] = useState(fechaSugerida);
   const [subiendo, setSubiendo] = useState(false);
   const [subiendoProg, setSubiendoProg] = useState(0);
   const [pendMedia, setPendMedia] = useState([]);
@@ -556,8 +568,8 @@ function Bitacora({ viaje, actualizar, media, recargarMedia }) {
     {/* nueva entrada */}
     <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: 14, marginBottom: 16 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 9 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 800, color: T.text, flex: 1 }}>¿Qué pasó hoy en el viaje?</div>
-        <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={{ background: T.card2, border: `1px solid ${T.border}`, borderRadius: 8, padding: "7px 9px", fontSize: 12, color: T.text, colorScheme: "dark" }} />
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: T.text, flex: 1 }}>{viaje.vivido ? "Sumar otro recuerdo de este viaje" : "¿Qué pasó hoy en el viaje?"}</div>
+        <input type="date" value={fecha} max={viaje.vivido ? undefined : hoyISO()} onChange={e => setFecha(e.target.value)} style={{ background: T.card2, border: `1px solid ${T.border}`, borderRadius: 8, padding: "7px 9px", fontSize: 12, color: T.text, colorScheme: "dark" }} />
       </div>
       <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={3} placeholder="Paramos en Rosario, comimos el mejor carlitos de la costanera…"
         style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 13px", fontSize: 13.5, color: T.text, outline: "none", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
@@ -573,7 +585,7 @@ function Bitacora({ viaje, actualizar, media, recargarMedia }) {
             <button onClick={() => setLugar(null)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer", fontSize: 14 }}>✕</button>
           </div>
           : <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
-            <button onClick={marcarAca} disabled={buscandoGPS} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>📍 {buscandoGPS ? "Buscando…" : "Estoy acá (GPS)"}</button>
+            {!viaje.vivido && <button onClick={marcarAca} disabled={buscandoGPS} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>📍 {buscandoGPS ? "Buscando…" : "Estoy acá (GPS)"}</button>}
             {(viaje.puntos || []).map((p, i) => <button key={i} onClick={() => setLugar({ nombre: p.nombre.split(",")[0], lat: p.lat, lon: p.lon })} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, cursor: "pointer" }}>{p.nombre.split(",")[0]}</button>)}
             <button onClick={() => setBuscarLugar(v2 => !v2)} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, cursor: "pointer" }}><Ico n="lupa" s={12} /> Otro lugar</button>
           </div>}
@@ -581,7 +593,7 @@ function Bitacora({ viaje, actualizar, media, recargarMedia }) {
       </div>
       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
         <button onClick={() => fileRef.current?.click()} disabled={subiendo} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 10, padding: "11px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}><Ico n="cam" s={15} c={T.accent} /> {subiendo ? `Guardando… ${subiendoProg}%` : "Fotos / videos"}</button>
-        <button onClick={publicar} disabled={subiendo} style={{ flex: 1, background: T.accent, border: "none", color: "#1a1205", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>Guardar en la bitácora</button>
+        <button onClick={publicar} disabled={subiendo} style={{ flex: 1, background: T.accent, border: "none", color: "#1a1205", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>{viaje.vivido ? "Sumar el recuerdo" : "Guardar en la bitácora"}</button>
       </div>
       <input ref={fileRef} type="file" accept="image/*,video/*" multiple onChange={onArchivos} style={{ display: "none" }} />
     </div>
