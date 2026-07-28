@@ -396,7 +396,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.61 · 26 jul 2026";
+const APP_VER = "v10.62 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1532,7 +1532,7 @@ function ReservasGuardadas({ viaje, actualizar, media }) {
 
   return (<div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 14 }}>
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
-      <div style={{ flex: 1, fontSize: 13, fontWeight: 800, color: T.text, display: "flex", alignItems: "center", gap: 7 }}><Ico n="cama" s={15} c={T.accent} /> Reservas del viaje</div>
+      <div style={{ flex: 1, fontSize: 13, fontWeight: 800, color: T.text, display: "flex", alignItems: "center", gap: 7 }}><Ico n="cama" s={15} c={T.accent} /> Itinerario de viaje</div>
       {!form && <button onClick={() => fileRef.current?.click()} style={{ background: "rgba(232,163,61,.12)", border: `1px solid ${T.accent}`, color: T.accent, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>＋ Agregar</button>}
     </div>
     <input ref={fileRef} type="file" accept="image/*,application/pdf" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) procesarArchivo(f); }} style={{ display: "none" }} />
@@ -1637,8 +1637,35 @@ function VuelosGuardados({ viaje, actualizar, media, cfg }) {
     let vuelo = { id: uid(), aerolinea: form.aerolinea.trim(), numero: form.numero.trim().toUpperCase(), fecha: form.fecha, horaSalida: form.horaSalida, horaLlegada: form.horaLlegada, origen: form.origen.trim(), destino: form.destino.trim(), aeropuertoOrigen: (form.aeropuertoOrigen || "").trim(), docId };
     setGuardandoExtra(true);
     try { const patch = await calcularHorarioVuelo(vuelo, cfg); if (patch) vuelo = { ...vuelo, ...patch }; } catch { }
+
+    // Ya compraste el pasaje: el destino queda decidido — se agrega como
+    // punto del viaje (así el cuadro "¿A dónde van?" ya no tiene sentido
+    // y desaparece solo), y la llegada queda anotada en el itinerario
+    // como el inicio del viaje, con la hora real del vuelo.
+    let puntosNuevos = viaje.puntos || [];
+    let bitacoraNueva = viaje.bitacora || [];
+    if (vuelo.destino) {
+      const yaExiste = puntosNuevos.some(p => p.nombre.split(",")[0].toLowerCase() === vuelo.destino.split(",")[0].toLowerCase());
+      if (!yaExiste) {
+        try {
+          const geo = await geocodificar(vuelo.destino);
+          if (geo?.[0]) {
+            puntosNuevos = [...puntosNuevos, { nombre: geo[0].nombre, lat: geo[0].lat, lon: geo[0].lon }];
+            const fechaLlegada = vuelo.fecha || hoyISO();
+            const horaTxt = vuelo.horaLlegada || "12:00";
+            bitacoraNueva = [...bitacoraNueva, {
+              id: uid(), fecha: fechaLlegada,
+              ts: new Date(`${fechaLlegada}T${horaTxt.length === 5 ? horaTxt : "12:00"}:00`).getTime(),
+              texto: `Llegamos a ${geo[0].nombre.split(",")[0]}${vuelo.aerolinea ? ` — vuelo ${vuelo.aerolinea}${vuelo.numero ? " " + vuelo.numero : ""}` : ""}${vuelo.horaLlegada ? `, ${vuelo.horaLlegada}hs` : ""}. Acá arranca el viaje.`,
+              lugar: { nombre: geo[0].nombre, lat: geo[0].lat, lon: geo[0].lon },
+            }];
+          }
+        } catch { }
+      }
+    }
+
     setGuardandoExtra(false);
-    actualizar({ ...viaje, vuelos: [...vuelos, vuelo] });
+    actualizar({ ...viaje, vuelos: [...vuelos, vuelo], puntos: puntosNuevos, bitacora: bitacoraNueva });
     setForm(null);
   }
   function borrar(id) {
