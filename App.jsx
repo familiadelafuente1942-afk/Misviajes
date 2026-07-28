@@ -396,7 +396,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.62 · 26 jul 2026";
+const APP_VER = "v10.64 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1940,7 +1940,7 @@ function ReservasTab({ viaje, actualizar, media, cfg, perfil }) {
   const AUXILIO = [["gas", "Estación de servicio", "estación de servicio"], ["cajero", "Cajero", "cajero automático"], ["pastilla", "Farmacia", "farmacia de turno"], ["llave", "Gomería", "gomería"], ["carrito", "Supermercado", "supermercado"], ["cruz", "Hospital", "hospital"]];
 
   return (<div>
-    <VuelosGuardados viaje={viaje} actualizar={actualizar} media={media} cfg={cfg} />
+    {(modo === "avion" || (viaje.vuelos || []).length > 0) && <VuelosGuardados viaje={viaje} actualizar={actualizar} media={media} cfg={cfg} />}
     <ReservasGuardadas viaje={viaje} actualizar={actualizar} media={media} />
 
     {/* dónde */}
@@ -2513,7 +2513,7 @@ function ClimaTab({ viaje, onResumen }) {
 /* ═══ PANTALLA DE UN VIAJE (pestañas: Ruta / Bitácora / Clip) ════ */
 function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
   const perfil = perfilTexto(cfg);
-  const [tab, setTab] = useState(viaje.vivido ? "bitacora" : (viaje.modoViaje === "avion" ? "reservas" : "ruta"));
+  const [tab, setTab] = useState(viaje.vivido ? "bitacora" : ((viaje.puntos || []).length === 0 ? "ruta" : (viaje.modoViaje === "avion" ? "reservas" : "ruta")));
   const [ruta, setRuta] = useState(null);
   const [calc, setCalc] = useState(false);
   const [err, setErr] = useState("");
@@ -2610,7 +2610,7 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
 
   const TABS = viaje.vivido
     ? [["bitacora", "Bitácora", "libro"], ["ruta", "Mapa del viaje", "mapa"], ["lugar", "Del lugar", "nota"], ["clip", "Clip", "peli"]]
-    : [["ruta", "Ruta", "mapa"], ["reservas", "Reservas", "ticket"], ["clima", "Clima", "sol"], ["lugar", "Del lugar", "nota"], ["gastos", "Gastos", "plata"], ["valija", "Valija", "valija"], ["bitacora", "Bitácora", "libro"], ["clip", "Clip", "peli"]];
+    : [["ruta", "Planeando mi viaje", "mapa"], ["reservas", "Reservas", "ticket"], ["clima", "Clima", "sol"], ["lugar", "Del lugar", "nota"], ["gastos", "Gastos", "plata"], ["valija", "Valija", "valija"], ["bitacora", "Bitácora", "libro"], ["clip", "Clip", "peli"]];
 
   return (<div style={{ minHeight: "100vh", paddingBottom: 90 }}>
     <div style={{ padding: "14px 16px 0", paddingTop: "max(14px, env(safe-area-inset-top))" }}>
@@ -2629,9 +2629,9 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
 
     <div style={{ padding: 16 }}>
       <UpdateBanner />
-      {!(puntos.length === 0 && !modoManualInicial) && <BarraViaje viaje={viaje} actualizar={actualizar} />}
+      {!(tab === "ruta" && puntos.length === 0 && !modoManualInicial) && <BarraViaje viaje={viaje} actualizar={actualizar} />}
 
-      {((puntos.length === 0 && !modoManualInicial) || (tab === "ruta" && plannerAbierto)) && <PlannerIA viaje={viaje} actualizar={(v2) => { actualizar(v2); setPlannerAbierto(false); }} perfil={perfil} cfg={cfg} onManual={puntos.length === 0 ? () => setModoManualInicial(true) : null} />}
+      {tab === "ruta" && ((puntos.length === 0 && !modoManualInicial) || plannerAbierto) && <PlannerIA viaje={viaje} actualizar={(v2) => { actualizar(v2); setPlannerAbierto(false); }} perfil={perfil} cfg={cfg} onManual={puntos.length === 0 ? () => setModoManualInicial(true) : null} />}
       {tab === "ruta" && viaje.atraccionPrincipal && <div style={{ background: "linear-gradient(135deg, rgba(232,163,61,.14), rgba(77,163,255,.08))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: "12px 14px", marginBottom: 14, display: "flex", gap: 10, alignItems: "flex-start" }}>
         <Ico n="estrella" s={17} c={T.accent} />
         <div><div style={{ fontSize: 10.5, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 3 }}>Lo imperdible de este viaje</div>
