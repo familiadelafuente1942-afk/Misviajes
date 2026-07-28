@@ -396,7 +396,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.71 · 26 jul 2026";
+const APP_VER = "v10.72 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1564,8 +1564,8 @@ function ReservasGuardadas({ viaje, actualizar, media }) {
       <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} placeholder="Nombre (hotel, empresa, actividad)" style={{ ...IN, width: "100%", marginBottom: 7, boxSizing: "border-box" }} />
       <input value={form.lugar} onChange={e => setForm({ ...form, lugar: e.target.value })} placeholder="Lugar / dirección" style={{ ...IN, width: "100%", marginBottom: 7, boxSizing: "border-box" }} />
       <div style={{ display: "flex", gap: 7, marginBottom: 7 }}>
-        <input type="date" value={form.fechaDesde} onChange={e => setForm({ ...form, fechaDesde: e.target.value })} style={{ ...IN, maxWidth: "50%", padding: "9px 6px", fontSize: 11.5, colorScheme: "dark" }} />
-        <input type="date" value={form.fechaHasta} onChange={e => setForm({ ...form, fechaHasta: e.target.value })} style={{ ...IN, maxWidth: "50%", padding: "9px 6px", fontSize: 11.5, colorScheme: "dark" }} />
+        <input type="date" value={form.fechaDesde} onChange={e => setForm({ ...form, fechaDesde: e.target.value })} style={{ ...IN, maxWidth: "calc(50% - 3.5px)", padding: "9px 6px", fontSize: 11.5, colorScheme: "dark" }} />
+        <input type="date" value={form.fechaHasta} onChange={e => setForm({ ...form, fechaHasta: e.target.value })} style={{ ...IN, maxWidth: "calc(50% - 3.5px)", padding: "9px 6px", fontSize: 11.5, colorScheme: "dark" }} />
       </div>
       <input value={form.numeroReserva} onChange={e => setForm({ ...form, numeroReserva: e.target.value })} placeholder="N° de reserva / confirmación" style={{ ...IN, width: "100%", marginBottom: 7, boxSizing: "border-box" }} />
       <textarea value={form.descripcion} onChange={e => setForm({ ...form, descripcion: e.target.value })} rows={2} placeholder="Descripción (qué incluye, tipo de habitación, horario…)" style={{ ...IN, width: "100%", marginBottom: 9, boxSizing: "border-box", fontFamily: "inherit", resize: "vertical" }} />
@@ -2381,11 +2381,11 @@ function PlannerIA({ viaje, actualizar, perfil, cfg, onManual }) {
     <div style={{ fontSize: 15, fontWeight: 800, color: T.text, marginBottom: 3 }}><Ico n="varita" s={17} c={T.accent} /> ¿A dónde quieren ir?</div>
     <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.55, marginBottom: 12 }}>{perfil ? "La IA ya sabe cómo viajan ustedes. Decile el destino y arma el itinerario a su medida." : "Tip: cargá su estilo de viaje en Ajustes ⚙ y el itinerario sale hecho para ustedes."}</div>
     <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
-      <div style={{ flex: 1, minWidth: 0, maxWidth: "50%" }}>
+      <div style={{ flex: 1, minWidth: 0, maxWidth: "calc(50% - 4px)" }}>
         <div style={{ fontSize: 10, color: T.sub, marginBottom: 3 }}>Ida</div>
         <input type="date" value={fechaIda} onChange={e => setFechaIda(e.target.value)} style={{ width: "100%", minWidth: 0, maxWidth: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 6px", fontSize: 11.5, color: T.text, outline: "none", colorScheme: "dark", boxSizing: "border-box" }} />
       </div>
-      <div style={{ flex: 1, minWidth: 0, maxWidth: "50%" }}>
+      <div style={{ flex: 1, minWidth: 0, maxWidth: "calc(50% - 4px)" }}>
         <div style={{ fontSize: 10, color: T.sub, marginBottom: 3 }}>Vuelta</div>
         <input type="date" value={fechaVuelta} min={fechaIda || undefined} onChange={e => setFechaVuelta(e.target.value)} style={{ width: "100%", minWidth: 0, maxWidth: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 6px", fontSize: 11.5, color: T.text, outline: "none", colorScheme: "dark", boxSizing: "border-box" }} />
       </div>
