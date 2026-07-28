@@ -396,7 +396,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.60 · 26 jul 2026";
+const APP_VER = "v10.61 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1726,16 +1726,20 @@ function EnDestino({ lugar, viaje, perfil }) {
   const punto = puntos.find(p => p.nombre.split(",")[0] === lugar);
   const [coords, setCoords] = useState(punto ? { lat: punto.lat, lon: punto.lon } : null);
   const [buscandoCoords, setBuscandoCoords] = useState(!punto);
-  const [sugerencia, setSugerencia] = useState("");
+  const [sugerencias, setSugerencias] = useState([]);     // ahora es una LISTA tocable, no un párrafo
+  const [sugerenciaAbierta, setSugerenciaAbierta] = useState(null);
   const [buscandoSug, setBuscandoSug] = useState(false);
-  // El hotel: una vez que lo buscás, TODO lo demás (Uber, "explorar cerca",
-  // y el mapa con los puntos de interés) se centra ahí en vez del centro
-  // genérico de la ciudad — igual que pediste.
   const [hotel, setHotel] = useState(null);
   const [poi, setPoi] = useState([]);
   const [buscandoPoi, setBuscandoPoi] = useState(false);
   const [errorPoi, setErrorPoi] = useState("");
+  const [rutaHotel, setRutaHotel] = useState(null);   // la línea del último lugar de bitácora (ej: el aeropuerto) hasta el hotel
   const coordsActivos = hotel || coords;
+
+  // El último lugar marcado en la bitácora de este viaje CON ubicación —
+  // típicamente "llegamos al aeropuerto" con el botón de GPS. Apenas
+  // cargás el hotel, se traza la ruta real desde ahí hasta acá.
+  const ultimoLugarBitacora = [...(viaje.bitacora || [])].filter(e => e.lugar?.lat).sort((a, b) => (b.ts || 0) - (a.ts || 0))[0]?.lugar;
 
   useEffect(() => {
     if (punto) { setCoords({ lat: punto.lat, lon: punto.lon }); setBuscandoCoords(false); return; }
@@ -1746,13 +1750,16 @@ function EnDestino({ lugar, viaje, perfil }) {
   }, [lugar]);
 
   useEffect(() => {
-    if (!hotel) { setPoi([]); return; }
+    if (!hotel) { setPoi([]); setRutaHotel(null); return; }
     let vivo = true;
     setBuscandoPoi(true); setErrorPoi("");
     puntosDeInteresCerca(hotel.lat, hotel.lon)
       .then(r => { if (vivo) setPoi(r); })
       .catch(() => { if (vivo) setErrorPoi("No pude traer los puntos cercanos ahora — probá los botones de arriba mientras tanto."); })
       .finally(() => vivo && setBuscandoPoi(false));
+    if (ultimoLugarBitacora) {
+      calcularRuta([ultimoLugarBitacora, hotel]).then(r => { if (vivo && r) setRutaHotel(r.linea); }).catch(() => { });
+    }
     return () => { vivo = false; };
   }, [hotel]);
 
@@ -1764,16 +1771,20 @@ function EnDestino({ lugar, viaje, perfil }) {
     if (!coordsActivos) { abrir(`https://www.google.com/search?q=${encodeURIComponent("Uber en " + lugar)}`); return; }
     abrir(`https://m.uber.com/looking?drop[latitude]=${coordsActivos.lat}&drop[longitude]=${coordsActivos.lon}&drop[nickname]=${encodeURIComponent(hotel ? hotel.nombre : lugar)}`);
   }
-  async function pedirSugerencia() {
-    setBuscandoSug(true); setSugerencia("");
+  async function pedirSugerencias() {
+    setBuscandoSug(true); setSugerencias([]); setSugerenciaAbierta(null);
     try {
-      const sys = "Sos un guía local muy concreto. Respondés corto, 2-4 líneas, sin vueltas.";
-      const prompt = `${perfil ? `Así viaja esta gente: ${perfil}\n\n` : ""}Están en ${lugar}, llegaron en avión (sin auto propio). Según el TIPO de lugar que es esto (¿es zona de nieve/esquí? ¿playa? ¿montaña para trekking? ¿ciudad histórica?), decime qué equipamiento conviene alquilar ahí (esquís, tabla, snorkel, bastones de trekking — lo que corresponda, nada si no aplica) y 2 o 3 actividades típicas de la zona que no se pueden perder. Sé específico de ESTE lugar puntual, no genérico.`;
-      const resp = await llamarIA([{ role: "user", content: prompt }], sys, 500);
-      setSugerencia(resp || "No encontré nada puntual para acá.");
-    } catch (e) { setSugerencia(""); alert(e.message); }
+      const sys = "Sos un guía local muy concreto, con conocimiento profundo del lugar. Respondés SOLO con un array JSON válido, sin texto adicional ni markdown.";
+      const prompt = `${perfil ? `Así viaja esta gente: ${perfil}\n\n` : ""}Están en ${lugar}${coordsActivos ? ` (cerca de lat ${coordsActivos.lat}, lon ${coordsActivos.lon})` : ""}, llegaron en avión, sin auto propio. Según el TIPO de lugar que es (¿zona de nieve/esquí? ¿playa? ¿montaña? ¿ciudad histórica?), nombrame entre 6 y 10 lugares CONCRETOS y reales: dónde alquilar el equipo típico de la zona (esquís, tablas, bicis, lo que corresponda — nada si no aplica), y las actividades/atracciones que no se pueden perder. Cada uno con nombre real del lugar/comercio si lo sabés, no genérico.\n\nRespondé SOLO este JSON:\n[{"nombre":"...","tipo":"alquiler o actividad","desc":"1-2 frases: qué es y por qué","lat":-00.0000,"lon":-00.0000}]`;
+      const resp = await llamarIA([{ role: "user", content: prompt }], sys, 1400);
+      const lista = extraerJSON(resp);
+      if (!lista || !lista.length) throw new Error("No encontré nada puntual para acá. Probá de nuevo.");
+      setSugerencias(lista.filter(x => x?.nombre).map(x => ({ ...x, id: uid() })));
+    } catch (e) { alert(e.message); }
     setBuscandoSug(false);
   }
+
+  const sugerenciasConMapa = sugerencias.filter(x => x.lat && x.lon).map(x => ({ ...x, desc: `${x.tipo ? x.tipo + " — " : ""}${x.desc || ""}` }));
 
   return (<div style={{ background: T.card, border: `1px solid ${T.accent}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 14 }}>
     <div style={{ fontSize: 13, fontWeight: 800, color: T.text, marginBottom: 4, display: "flex", alignItems: "center", gap: 7 }}><Ico n="pin" s={15} c={T.accent} /> Ya en {lugar}</div>
@@ -1786,7 +1797,7 @@ function EnDestino({ lugar, viaje, perfil }) {
       <button onClick={() => setHotel(null)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="cerrar" s={12} /></button>
     </div> : <div style={{ marginBottom: 13 }}>
       <BuscarLugar placeholder="Nombre o dirección del hotel…" onElegir={(r) => setHotel(r)} />
-      <div style={{ fontSize: 10.5, color: T.muted, marginTop: 5 }}>Cargalo y el mapa de acá abajo, Uber y "explorar cerca" se centran justo ahí — no en el centro genérico de {lugar}.</div>
+      <div style={{ fontSize: 10.5, color: T.muted, marginTop: 5 }}>{ultimoLugarBitacora ? `Cargalo y trazamos la ruta desde "${ultimoLugarBitacora.nombre.split(",")[0]}" (lo último que marcaste en la bitácora) hasta acá.` : `Cargalo y el mapa de acá abajo, Uber y "explorar cerca" se centran justo ahí — no en el centro genérico de ${lugar}.`}</div>
     </div>}
 
     <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>🚗 Alquilar un auto acá</div>
@@ -1812,17 +1823,29 @@ function EnDestino({ lugar, viaje, perfil }) {
     {hotel && <>
       {buscandoPoi && <div style={{ fontSize: 11.5, color: T.accent, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><Ico n="varita" s={12} /> Buscando restaurantes, tiendas y equipamiento cerca del hotel…</div>}
       {errorPoi && <div style={{ fontSize: 11.5, color: T.sub, marginBottom: 10 }}>{errorPoi}</div>}
-      {!buscandoPoi && poi.length > 0 && <>
-        <Mapa puntos={[{ nombre: hotel.nombre, lat: hotel.lat, lon: hotel.lon }]} sugerencias={poi} onAgregarSug={() => { }} alto={280} />
-        <div style={{ fontSize: 10.5, color: T.muted, margin: "8px 0 13px" }}>{poi.length} lugares marcados alrededor del hotel — tocá cada ⭐ para ver qué es.</div>
+      {!buscandoPoi && (poi.length > 0 || rutaHotel) && <>
+        <Mapa puntos={[{ nombre: hotel.nombre, lat: hotel.lat, lon: hotel.lon }]} linea={rutaHotel} sugerencias={[...poi, ...sugerenciasConMapa]} onAgregarSug={() => { }} alto={280} />
+        <div style={{ fontSize: 10.5, color: T.muted, margin: "8px 0 13px" }}>{poi.length > 0 ? `${poi.length} lugares marcados alrededor del hotel — tocá cada ⭐ para ver qué es.` : ""}{rutaHotel ? `${poi.length > 0 ? " · " : ""}ruta trazada desde donde marcaste último en la bitácora.` : ""}</div>
       </>}
-      {!buscandoPoi && !errorPoi && poi.length === 0 && <div style={{ fontSize: 11.5, color: T.sub, marginBottom: 13 }}>No encontré lugares cargados en el mapa para esta zona puntual — probá los botones de arriba.</div>}
+      {!buscandoPoi && !errorPoi && poi.length === 0 && !rutaHotel && <div style={{ fontSize: 11.5, color: T.sub, marginBottom: 13 }}>No encontré lugares cargados en el mapa para esta zona puntual — probá los botones de arriba.</div>}
     </>}
 
-    <button onClick={pedirSugerencia} disabled={buscandoSug} style={{ width: "100%", background: buscandoSug ? T.card2 : T.accent, border: "none", color: buscandoSug ? T.sub : "#1a1205", borderRadius: 9, padding: "12px", fontSize: 12.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+    <button onClick={pedirSugerencias} disabled={buscandoSug} style={{ width: "100%", background: buscandoSug ? T.card2 : T.accent, border: "none", color: buscandoSug ? T.sub : "#1a1205", borderRadius: 9, padding: "12px", fontSize: 12.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
       <Ico n="varita" s={13} /> {buscandoSug ? "Pensando…" : "✨ ¿Qué hacer o alquilar acá?"}
     </button>
-    {sugerencia && <div style={{ background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 12px", marginTop: 9, fontSize: 12, color: T.text, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{sugerencia}</div>}
+    {sugerencias.length > 0 && <div style={{ marginTop: 9 }}>
+      {sugerencias.map(sg => (<div key={sg.id}>
+        <div onClick={() => setSugerenciaAbierta(sugerenciaAbierta === sg.id ? null : sg.id)} style={{ display: "flex", alignItems: "center", gap: 9, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "10px 12px", marginBottom: 6, cursor: "pointer" }}>
+          <Ico n={sg.tipo?.toLowerCase().includes("alquil") ? "carrito" : "estrella"} s={14} c={T.accent} />
+          <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: T.text }}>{sg.nombre}</span>
+          <span style={{ fontSize: 10, color: T.muted }}>{sugerenciaAbierta === sg.id ? "▲" : "▼"}</span>
+        </div>
+        {sugerenciaAbierta === sg.id && <div style={{ fontSize: 11.5, color: T.sub, lineHeight: 1.5, padding: "0 12px 10px", marginTop: -4 }}>
+          {sg.tipo && <span style={{ color: T.accent, fontWeight: 700 }}>{sg.tipo}. </span>}{sg.desc}
+          {sg.lat && sg.lon && <div style={{ marginTop: 6 }}><button onClick={() => abrir(`https://www.google.com/maps/search/${encodeURIComponent(sg.nombre)}/@${sg.lat},${sg.lon},16z`)} style={{ background: T.card, border: `1px solid ${T.border}`, color: T.accent, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Ver en el mapa</button></div>}
+        </div>}
+      </div>))}
+    </div>}
   </div>);
 }
 
