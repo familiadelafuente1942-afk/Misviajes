@@ -401,7 +401,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.79 · 26 jul 2026";
+const APP_VER = "v10.80 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -2369,10 +2369,16 @@ function PlannerIA({ viaje, actualizar, perfil, cfg, onManual, destino, setDesti
       const plan = m ? JSON.parse(m[0]) : null;
       if (!plan || !plan.paradas?.length) throw new Error("La IA no devolvió un itinerario válido. Probá de nuevo.");
       const ps = plan.paradas.filter(p => p.lat && p.lon).map(p => ({ nombre: `${p.nombre}, ${p.pais_o_provincia || ""}`.replace(/, $/, ""), lat: p.lat, lon: p.lon }));
+      // El origen también tiene que quedar como punto REAL del mapa (no
+      // solo como texto) — si no, funciones como "¿Qué hay lindo para
+      // ver?" piensan que falta cargar el origen, aunque ya esté puesto.
+      let origenPunto = null;
+      try { const geo = await geocodificar(desde); if (geo?.[0]) origenPunto = { nombre: geo[0].nombre, lat: geo[0].lat, lon: geo[0].lon }; } catch { }
+      const psConOrigen = origenPunto && !ps.some(p => p.nombre.split(",")[0].toLowerCase() === origenPunto.nombre.split(",")[0].toLowerCase()) ? [origenPunto, ...ps] : ps;
       actualizar({
         ...viaje,
         nombre: plan.nombre_viaje || viaje.nombre,
-        puntos: ps,
+        puntos: psConOrigen,
         itinerario: plan.paradas.map(p => ({ nombre: p.nombre, noches: p.noches, por_que: p.por_que })),
         atraccionPrincipal: plan.atraccion_principal || "",
         fechaInicio: fechaIda || viaje.fechaInicio,
@@ -2662,15 +2668,30 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
   const resumenPuntos = () => puntos.map((p, i) => `${i === 0 ? "Origen" : i === puntos.length - 1 ? "Destino" : `Parada ${i}`}: ${p.nombre.split(",").slice(0, 2).join(",")}`).join("\n");
 
   async function sugerirConIA() {
-    if (puntos.length < 2) { alert("Cargá origen y destino primero."); return; }
+    // Sanar viajes ya armados donde el origen quedó solo como texto
+    // (viaje.origenViaje) y nunca como punto real del mapa — se completa
+    // solo, la primera vez que hace falta, sin pedirte que rehagas nada.
+    let puntosUsar = puntos;
+    if (puntos.length < 2 && viaje.origenViaje) {
+      try {
+        const geo = await geocodificar(viaje.origenViaje);
+        if (geo?.[0] && !puntos.some(p => p.nombre.split(",")[0].toLowerCase() === geo[0].nombre.split(",")[0].toLowerCase())) {
+          puntosUsar = [{ nombre: geo[0].nombre, lat: geo[0].lat, lon: geo[0].lon }, ...puntos];
+        }
+      } catch { }
+    }
+    if (puntosUsar.length < 2) { alert("Cargá origen y destino primero."); return; }
     setSugiriendo(true);
     try {
       const sys = "Sos un guía de viajes experto en rutas por auto, con conocimiento profundo de Argentina y el mundo. Respondés SOLO con un array JSON válido, sin texto adicional ni markdown.";
-      const prompt = `${perfil ? `Así viajamos nosotros: ${perfil}\n\n` : ""}Estoy planificando este viaje en auto:\n${resumenPuntos()}\n\nSugerime entre 8 y 12 lugares LINDOS o de interés que estén SOBRE el recorrido o a un desvío corto (máx ~40 km): pueblos con encanto, miradores, parques nacionales, comidas típicas imperdibles, sitios históricos. Evitá los que ya son paradas.\n\nRespondé SOLO este JSON:\n[{"nombre":"...","localidad":"...","provincia_o_region":"...","desc":"por qué vale la pena, 1-2 frases","desvio_km":0,"lat":-00.0000,"lon":-00.0000}]`;
+      const resumenUsar = puntosUsar.map((p, i) => `${i === 0 ? "Origen" : i === puntosUsar.length - 1 ? "Destino" : `Parada ${i}`}: ${p.nombre.split(",").slice(0, 2).join(",")}`).join("\n");
+      const prompt = `${perfil ? `Así viajamos nosotros: ${perfil}\n\n` : ""}Estoy planificando este viaje en auto:\n${resumenUsar}\n\nSugerime entre 8 y 12 lugares LINDOS o de interés que estén SOBRE el recorrido o a un desvío corto (máx ~40 km): pueblos con encanto, miradores, parques nacionales, comidas típicas imperdibles, sitios históricos. Evitá los que ya son paradas.\n\nRespondé SOLO este JSON:\n[{"nombre":"...","localidad":"...","provincia_o_region":"...","desc":"por qué vale la pena, 1-2 frases","desvio_km":0,"lat":-00.0000,"lon":-00.0000}]`;
       const resp = await llamarIA([{ role: "user", content: prompt }], sys, 3000);
       const lista = extraerJSON(resp);
       if (!lista || !lista.length) throw new Error("La IA no devolvió sugerencias válidas. Probá de nuevo.");
-      actualizar({ ...viaje, sugerencias: lista.filter(x => x && x.nombre && x.lat && x.lon).map(x => ({ ...x, id: uid() })) });
+      // un solo actualizar con todo junto — puntos sanados + sugerencias —
+      // para que uno no pise al otro (esto era justo el bug real).
+      actualizar({ ...viaje, puntos: puntosUsar, sugerencias: lista.filter(x => x && x.nombre && x.lat && x.lon).map(x => ({ ...x, id: uid() })) });
     } catch (e) { alert(e.message); }
     setSugiriendo(false);
   }
@@ -2965,11 +2986,15 @@ function ChatIdeas({ cfg, viajes, onCrearViaje }) {
       const plan = m ? JSON.parse(m[0]) : null;
       if (!plan || !plan.paradas?.length) throw new Error("La IA no devolvió un itinerario válido. Probá de nuevo.");
       const ps = plan.paradas.filter(p => p.lat && p.lon).map(p => ({ nombre: `${p.nombre}, ${p.pais_o_provincia || ""}`.replace(/, $/, ""), lat: p.lat, lon: p.lon }));
+      let origenPunto = null;
+      try { const geo = await geocodificar(desde); if (geo?.[0]) origenPunto = { nombre: geo[0].nombre, lat: geo[0].lat, lon: geo[0].lon }; } catch { }
+      const psConOrigen = origenPunto && !ps.some(p => p.nombre.split(",")[0].toLowerCase() === origenPunto.nombre.split(",")[0].toLowerCase()) ? [origenPunto, ...ps] : ps;
       const v = {
         id: uid(), nombre: plan.nombre_viaje || destino, creado: Date.now(), modoViaje: "auto",
-        puntos: ps, sugerencias: [], bitacora: [], fechaInicio: "", diasVacaciones: String(dias),
+        puntos: psConOrigen, sugerencias: [], bitacora: [], fechaInicio: "", diasVacaciones: String(dias),
         itinerario: plan.paradas.map(p => ({ nombre: p.nombre, noches: p.noches, por_que: p.por_que })),
         atraccionPrincipal: plan.atraccion_principal || "",
+        origenViaje: desde,
       };
       onCrearViaje(v);
       setAbierto(false);
