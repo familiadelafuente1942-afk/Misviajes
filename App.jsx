@@ -401,7 +401,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.76 · 26 jul 2026";
+const APP_VER = "v10.78 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -651,14 +651,14 @@ function BarraViaje({ viaje, actualizar }) {
         : <div style={{ flex: 1, fontSize: 12.5, color: T.sub }}>{viaje.vivido ? "¿Cuándo fue este viaje?" : "¿Cuándo salís y cuántos días tenés?"}</div>}
       <button onClick={() => setEditando(v => !v)} style={{ background: "none", border: `1px solid ${T.border}`, color: T.sub, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{editando ? "Listo" : ini ? "Editar" : "Cargar"}</button>
     </div>
-    {editando && <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-      <div style={{ flex: 1 }}>
+    {editando && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginTop: 10, width: "100%", boxSizing: "border-box" }}>
+      <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 10.5, color: T.sub, marginBottom: 3 }}>{viaje.vivido ? "Salieron" : "Salida"}</div>
-        <input type="date" value={ini || ""} onChange={e => actualizar({ ...viaje, fechaInicio: e.target.value })} style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "10px", fontSize: 13, color: T.text, colorScheme: "dark" }} />
+        <input type="date" value={ini || ""} onChange={e => actualizar({ ...viaje, fechaInicio: e.target.value })} style={{ width: "100%", minWidth: 0, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "10px 6px", fontSize: 12, color: T.text, colorScheme: "dark", boxSizing: "border-box" }} />
       </div>
-      <div style={{ width: 120 }}>
-        <div style={{ fontSize: 10.5, color: T.sub, marginBottom: 3 }}>{viaje.vivido ? "Cuántos días" : "Días de vacaciones"}</div>
-        <input type="number" value={viaje.diasVacaciones || ""} onChange={e => actualizar({ ...viaje, diasVacaciones: e.target.value })} placeholder="14" style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "10px", fontSize: 13, color: T.text }} />
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 10.5, color: T.sub, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{viaje.vivido ? "Cuántos días" : "Días de vacaciones"}</div>
+        <input type="number" value={viaje.diasVacaciones || ""} onChange={e => actualizar({ ...viaje, diasVacaciones: e.target.value })} placeholder="14" style={{ width: "100%", minWidth: 0, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "10px 6px", fontSize: 12, color: T.text, boxSizing: "border-box" }} />
       </div>
     </div>}
   </div>);
@@ -1568,7 +1568,7 @@ function ReservasGuardadas({ viaje, actualizar, media }) {
       </div>
       <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} placeholder="Nombre (hotel, empresa, actividad)" style={{ ...IN, width: "100%", marginBottom: 7, boxSizing: "border-box" }} />
       <input value={form.lugar} onChange={e => setForm({ ...form, lugar: e.target.value })} placeholder="Lugar / dirección" style={{ ...IN, width: "100%", marginBottom: 7, boxSizing: "border-box" }} />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 7 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 7, width: "100%", boxSizing: "border-box" }}>
         <input type="date" value={form.fechaDesde} onChange={e => setForm({ ...form, fechaDesde: e.target.value })} style={{ ...IN, padding: "9px 6px", fontSize: 11.5, colorScheme: "dark" }} />
         <input type="date" value={form.fechaHasta} onChange={e => setForm({ ...form, fechaHasta: e.target.value })} style={{ ...IN, padding: "9px 6px", fontSize: 11.5, colorScheme: "dark" }} />
       </div>
@@ -2392,7 +2392,7 @@ function PlannerIA({ viaje, actualizar, perfil, cfg, onManual }) {
   return (<div style={{ background: "linear-gradient(135deg, rgba(232,163,61,.12), rgba(77,163,255,.07))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: 16, marginBottom: 16 }}>
     <div style={{ fontSize: 15, fontWeight: 800, color: T.text, marginBottom: 3 }}><Ico n="varita" s={17} c={T.accent} /> ¿A dónde quieren ir?</div>
     <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.55, marginBottom: 12 }}>{perfil ? "La IA ya sabe cómo viajan ustedes. Decile el destino y arma el itinerario a su medida." : "Tip: cargá su estilo de viaje en Ajustes ⚙ y el itinerario sale hecho para ustedes."}</div>
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 4 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 4, width: "100%", boxSizing: "border-box" }}>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 10, color: T.sub, marginBottom: 3 }}>Ida</div>
         <input type="date" value={fechaIda} onChange={e => setFechaIda(e.target.value)} style={{ width: "100%", minWidth: 0, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 6px", fontSize: 11.5, color: T.text, outline: "none", colorScheme: "dark", boxSizing: "border-box" }} />
