@@ -341,6 +341,11 @@ const CODIGOS_AEROPUERTO = {
   "miami": "MIA", "los angeles": "LAX", "cancun": "CUN", "punta cana": "PUJ",
 };
 const abrir = (u) => window.open(u, "_blank");   // global: cualquier componente puede abrir un link, sin duplicar la función
+// Un viaje "vacío" — recién creado, sin nada cargado todavía. No debe
+// quedar guardado como tarjeta si lo abandonás sin tocar nada.
+function esViajeVacio(v) {
+  return !v.vivido && (v.puntos || []).length === 0 && (v.vuelos || []).length === 0 && (v.reservas || []).length === 0 && (v.bitacora || []).length === 0;
+}
 // Puntos de interés REALES alrededor de una coordenada — restaurantes,
 // souvenirs, ropa/equipamiento deportivo, supermercados — usando
 // OpenStreetMap (Overpass), gratis y sin clave, la misma familia que ya
@@ -396,7 +401,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.73 · 26 jul 2026";
+const APP_VER = "v10.75 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1563,9 +1568,9 @@ function ReservasGuardadas({ viaje, actualizar, media }) {
       </div>
       <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} placeholder="Nombre (hotel, empresa, actividad)" style={{ ...IN, width: "100%", marginBottom: 7, boxSizing: "border-box" }} />
       <input value={form.lugar} onChange={e => setForm({ ...form, lugar: e.target.value })} placeholder="Lugar / dirección" style={{ ...IN, width: "100%", marginBottom: 7, boxSizing: "border-box" }} />
-      <div style={{ display: "flex", gap: 20, marginBottom: 7 }}>
-        <input type="date" value={form.fechaDesde} onChange={e => setForm({ ...form, fechaDesde: e.target.value })} style={{ ...IN, maxWidth: "calc(50% - 10px)", padding: "9px 6px", fontSize: 11.5, colorScheme: "dark" }} />
-        <input type="date" value={form.fechaHasta} onChange={e => setForm({ ...form, fechaHasta: e.target.value })} style={{ ...IN, maxWidth: "calc(50% - 10px)", padding: "9px 6px", fontSize: 11.5, colorScheme: "dark" }} />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 7 }}>
+        <input type="date" value={form.fechaDesde} onChange={e => setForm({ ...form, fechaDesde: e.target.value })} style={{ ...IN, padding: "9px 6px", fontSize: 11.5, colorScheme: "dark" }} />
+        <input type="date" value={form.fechaHasta} onChange={e => setForm({ ...form, fechaHasta: e.target.value })} style={{ ...IN, padding: "9px 6px", fontSize: 11.5, colorScheme: "dark" }} />
       </div>
       <input value={form.numeroReserva} onChange={e => setForm({ ...form, numeroReserva: e.target.value })} placeholder="N° de reserva / confirmación" style={{ ...IN, width: "100%", marginBottom: 7, boxSizing: "border-box" }} />
       <textarea value={form.descripcion} onChange={e => setForm({ ...form, descripcion: e.target.value })} rows={2} placeholder="Descripción (qué incluye, tipo de habitación, horario…)" style={{ ...IN, width: "100%", marginBottom: 9, boxSizing: "border-box", fontFamily: "inherit", resize: "vertical" }} />
@@ -2380,14 +2385,14 @@ function PlannerIA({ viaje, actualizar, perfil, cfg, onManual }) {
   return (<div style={{ background: "linear-gradient(135deg, rgba(232,163,61,.12), rgba(77,163,255,.07))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: 16, marginBottom: 16 }}>
     <div style={{ fontSize: 15, fontWeight: 800, color: T.text, marginBottom: 3 }}><Ico n="varita" s={17} c={T.accent} /> ¿A dónde quieren ir?</div>
     <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.55, marginBottom: 12 }}>{perfil ? "La IA ya sabe cómo viajan ustedes. Decile el destino y arma el itinerario a su medida." : "Tip: cargá su estilo de viaje en Ajustes ⚙ y el itinerario sale hecho para ustedes."}</div>
-    <div style={{ display: "flex", gap: 20, marginBottom: 4 }}>
-      <div style={{ flex: 1, minWidth: 0, maxWidth: "calc(50% - 10px)" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 4 }}>
+      <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 10, color: T.sub, marginBottom: 3 }}>Ida</div>
-        <input type="date" value={fechaIda} onChange={e => setFechaIda(e.target.value)} style={{ width: "100%", minWidth: 0, maxWidth: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 6px", fontSize: 11.5, color: T.text, outline: "none", colorScheme: "dark", boxSizing: "border-box" }} />
+        <input type="date" value={fechaIda} onChange={e => setFechaIda(e.target.value)} style={{ width: "100%", minWidth: 0, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 6px", fontSize: 11.5, color: T.text, outline: "none", colorScheme: "dark", boxSizing: "border-box" }} />
       </div>
-      <div style={{ flex: 1, minWidth: 0, maxWidth: "calc(50% - 10px)" }}>
+      <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 10, color: T.sub, marginBottom: 3 }}>Vuelta</div>
-        <input type="date" value={fechaVuelta} min={fechaIda || undefined} onChange={e => setFechaVuelta(e.target.value)} style={{ width: "100%", minWidth: 0, maxWidth: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 6px", fontSize: 11.5, color: T.text, outline: "none", colorScheme: "dark", boxSizing: "border-box" }} />
+        <input type="date" value={fechaVuelta} min={fechaIda || undefined} onChange={e => setFechaVuelta(e.target.value)} style={{ width: "100%", minWidth: 0, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 6px", fontSize: 11.5, color: T.text, outline: "none", colorScheme: "dark", boxSizing: "border-box" }} />
       </div>
     </div>
     {fechaIda && fechaVuelta && <div style={{ fontSize: 10.5, color: T.accent, marginBottom: 8 }}>{dias} día{dias == 1 ? "" : "s"} de viaje</div>}
@@ -3300,6 +3305,13 @@ function MisViajesApp({ onSalir }) {
   const [eligiendoModo, setEligiendoModo] = useState(false);
   const guardar = (d) => { setData(d); guardarLS(d); };
   const guardarCfg = (c) => { setCfg(c); guardarCfgLS(c); };
+  // Limpieza de arranque: viajes vacíos que quedaron pegados de antes (por
+  // ejemplo, entrar y salir sin cargar nada) — se sacan una sola vez, al
+  // abrir la app, para no arrastrar tarjetas fantasma para siempre.
+  useEffect(() => {
+    const vacios = (data.viajes || []).filter(esViajeVacio);
+    if (vacios.length) guardar({ ...data, viajes: data.viajes.filter(v2 => !esViajeVacio(v2)) });
+  }, []);
   // El ícono muestra los días que faltan para el próximo viaje (hasta 60 días antes).
   useEffect(() => {
     const hoy = hoyISO();
@@ -3312,7 +3324,12 @@ function MisViajesApp({ onSalir }) {
   const viaje = (data.viajes || []).find(v => v.id === viajeId);
   if (viaje) return <Fondo key={cfg.tema || "ruta40"} cfg={cfg}><PantallaViaje viaje={viaje} cfg={cfg}
     actualizar={(v) => guardar({ ...data, viajes: data.viajes.map(x => x.id === v.id ? v : x) })}
-    volver={() => setViajeId(null)} /></Fondo>;
+    volver={() => {
+      // si te vas sin cargar nada (ni recorrido, ni vuelo, ni reserva, ni
+      // bitácora), no queda como tarjeta vacía dando vueltas — se borra sola.
+      if (esViajeVacio(viaje)) guardar({ ...data, viajes: data.viajes.filter(x => x.id !== viaje.id) });
+      setViajeId(null);
+    }} /></Fondo>;
 
   function nuevoViaje(modo) {
     const v = { id: uid(), nombre: "Nuevo viaje", creado: Date.now(), modoViaje: modo, puntos: [], sugerencias: [], bitacora: [], fechaInicio: "", diasVacaciones: "" };
