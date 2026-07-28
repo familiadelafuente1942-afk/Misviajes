@@ -405,7 +405,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.82 · 26 jul 2026";
+const APP_VER = "v10.83 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -2291,7 +2291,7 @@ function HospedajeLinks({ lugar, f }) {
    que no desaparezca junto con él una vez que el viaje ya está armado.
    Usa los datos del viaje si ya existen (destino, origen, fechas);
    si falta algo, lo pide con campos chicos, sin duplicar el cuadro de arriba. */
-function EstimadorCosto({ viaje, perfil, cfg, borradorDestino, borradorDesde }) {
+function EstimadorCosto({ viaje, perfil, cfg, borradorDestino, borradorDesde, estimado, setEstimado, abierto, setAbierto }) {
   const puntos = viaje.puntos || [];
   const destinoConocido = puntos.length ? puntos[puntos.length - 1].nombre : "";
   const desdeConocido = viaje.origenViaje || cfg?.casa?.nombre || "";
@@ -2302,8 +2302,6 @@ function EstimadorCosto({ viaje, perfil, cfg, borradorDestino, borradorDesde }) 
   const faltaAlgo = !destino || !(borradorDesde || desdeConocido);
   const dias = Number(viaje.diasVacaciones) || null;
   const [estimando, setEstimando] = useState(false);
-  const [estimado, setEstimado] = useState(null);
-  const [abierto, setAbierto] = useState(false);
 
   async function estimarCosto() {
     if (!destino.trim()) { alert("Decime a dónde van, primero."); return; }
@@ -2659,6 +2657,10 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
   const [borradorDesde, setBorradorDesde] = useState(cfg?.casa?.nombre || "Buenos Aires, Argentina");
   const [borradorFechaIda, setBorradorFechaIda] = useState(viaje.fechaInicio || "");
   const [borradorFechaVuelta, setBorradorFechaVuelta] = useState(viaje.fechaInicio && viaje.diasVacaciones ? isoMasDiasSimple(viaje.fechaInicio, Number(viaje.diasVacaciones) - 1) : "");
+  // El resultado de "¿Cuánto sale?" vive acá, no adentro del cuadro — así
+  // no se pierde si vas a Reservas y volvés a Planeando mi viaje.
+  const [costoEstimado, setCostoEstimado] = useState(null);
+  const [costoAbierto, setCostoAbierto] = useState(false);
 
   const puntos = viaje.puntos || [];
   const sugerencias = viaje.sugerencias || [];
@@ -2775,7 +2777,7 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
 
       {tab === "ruta" && ((puntos.length === 0 && !modoManualInicial) || plannerAbierto) && <PlannerIA viaje={viaje} actualizar={(v2) => { actualizar(v2); setPlannerAbierto(false); }} perfil={perfil} cfg={cfg} onManual={puntos.length === 0 ? () => setModoManualInicial(true) : null}
         destino={borradorDestino} setDestino={setBorradorDestino} desde={borradorDesde} setDesde={setBorradorDesde} fechaIda={borradorFechaIda} setFechaIda={setBorradorFechaIda} fechaVuelta={borradorFechaVuelta} setFechaVuelta={setBorradorFechaVuelta} />}
-      {tab === "ruta" && <EstimadorCosto viaje={viaje} perfil={perfil} cfg={cfg} borradorDestino={borradorDestino} borradorDesde={borradorDesde} />}
+      {tab === "ruta" && <EstimadorCosto viaje={viaje} perfil={perfil} cfg={cfg} borradorDestino={borradorDestino} borradorDesde={borradorDesde} estimado={costoEstimado} setEstimado={setCostoEstimado} abierto={costoAbierto} setAbierto={setCostoAbierto} />}
       {tab === "ruta" && viaje.atraccionPrincipal && <div style={{ background: "linear-gradient(135deg, rgba(232,163,61,.14), rgba(77,163,255,.08))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: "12px 14px", marginBottom: 14, display: "flex", gap: 10, alignItems: "flex-start" }}>
         <Ico n="estrella" s={17} c={T.accent} />
         <div><div style={{ fontSize: 10.5, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 3 }}>Lo imperdible de este viaje</div>
