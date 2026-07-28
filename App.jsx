@@ -341,6 +341,21 @@ const CODIGOS_AEROPUERTO = {
   "miami": "MIA", "los angeles": "LAX", "cancun": "CUN", "punta cana": "PUJ",
 };
 const abrir = (u) => window.open(u, "_blank");   // global: cualquier componente puede abrir un link, sin duplicar la función
+// Puntos de interés REALES alrededor de una coordenada — restaurantes,
+// souvenirs, ropa/equipamiento deportivo, supermercados — usando
+// OpenStreetMap (Overpass), gratis y sin clave, la misma familia que ya
+// usamos para geocodificar. Devuelve el mismo formato que "sugerencias"
+// del mapa de Ruta, así se puede mostrar con el mismo componente Mapa.
+const ETIQUETA_POI = { restaurant: "🍽 Restaurante", cafe: "☕ Café", fast_food: "🍔 Comida rápida", gift: "🎁 Souvenirs y regalos", clothes: "👕 Ropa", sports: "🎿 Deportes / alquiler de equipo", outdoor: "🎒 Equipamiento outdoor", supermarket: "🛒 Supermercado" };
+async function puntosDeInteresCerca(lat, lon) {
+  const query = `[out:json][timeout:15];(node["amenity"="restaurant"](around:900,${lat},${lon});node["amenity"="cafe"](around:900,${lat},${lon});node["amenity"="fast_food"](around:900,${lat},${lon});node["shop"="gift"](around:900,${lat},${lon});node["shop"="clothes"](around:900,${lat},${lon});node["shop"="sports"](around:900,${lat},${lon});node["shop"="outdoor"](around:900,${lat},${lon});node["shop"="supermarket"](around:900,${lat},${lon}););out body 40;`;
+  const r = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: query });
+  const j = await r.json();
+  return (j.elements || [])
+    .filter(e => e.tags?.name && e.lat && e.lon)
+    .map(e => ({ id: "poi" + e.id, nombre: e.tags.name, lat: e.lat, lon: e.lon, desc: ETIQUETA_POI[e.tags.amenity || e.tags.shop] || "" }))
+    .slice(0, 35);
+}
 function codigoAeropuerto(nombre) {
   const limpio = (nombre || "").split(",")[0].trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   return CODIGOS_AEROPUERTO[limpio] || null;
@@ -381,7 +396,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.59 · 26 jul 2026";
+const APP_VER = "v10.60 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1713,6 +1728,14 @@ function EnDestino({ lugar, viaje, perfil }) {
   const [buscandoCoords, setBuscandoCoords] = useState(!punto);
   const [sugerencia, setSugerencia] = useState("");
   const [buscandoSug, setBuscandoSug] = useState(false);
+  // El hotel: una vez que lo buscás, TODO lo demás (Uber, "explorar cerca",
+  // y el mapa con los puntos de interés) se centra ahí en vez del centro
+  // genérico de la ciudad — igual que pediste.
+  const [hotel, setHotel] = useState(null);
+  const [poi, setPoi] = useState([]);
+  const [buscandoPoi, setBuscandoPoi] = useState(false);
+  const [errorPoi, setErrorPoi] = useState("");
+  const coordsActivos = hotel || coords;
 
   useEffect(() => {
     if (punto) { setCoords({ lat: punto.lat, lon: punto.lon }); setBuscandoCoords(false); return; }
@@ -1722,13 +1745,24 @@ function EnDestino({ lugar, viaje, perfil }) {
     return () => { vivo = false; };
   }, [lugar]);
 
+  useEffect(() => {
+    if (!hotel) { setPoi([]); return; }
+    let vivo = true;
+    setBuscandoPoi(true); setErrorPoi("");
+    puntosDeInteresCerca(hotel.lat, hotel.lon)
+      .then(r => { if (vivo) setPoi(r); })
+      .catch(() => { if (vivo) setErrorPoi("No pude traer los puntos cercanos ahora — probá los botones de arriba mientras tanto."); })
+      .finally(() => vivo && setBuscandoPoi(false));
+    return () => { vivo = false; };
+  }, [hotel]);
+
   function abrirCerca(categoria) {
-    if (!coords) { abrir(`https://www.google.com/maps/search/${encodeURIComponent(categoria + " en " + lugar)}`); return; }
-    abrir(`https://www.google.com/maps/search/${encodeURIComponent(categoria)}/@${coords.lat},${coords.lon},15z`);
+    if (!coordsActivos) { abrir(`https://www.google.com/maps/search/${encodeURIComponent(categoria + " en " + lugar)}`); return; }
+    abrir(`https://www.google.com/maps/search/${encodeURIComponent(categoria)}/@${coordsActivos.lat},${coordsActivos.lon},15z`);
   }
   function abrirUber() {
-    if (!coords) { abrir(`https://www.google.com/search?q=${encodeURIComponent("Uber en " + lugar)}`); return; }
-    abrir(`https://m.uber.com/looking?drop[latitude]=${coords.lat}&drop[longitude]=${coords.lon}&drop[nickname]=${encodeURIComponent(lugar)}`);
+    if (!coordsActivos) { abrir(`https://www.google.com/search?q=${encodeURIComponent("Uber en " + lugar)}`); return; }
+    abrir(`https://m.uber.com/looking?drop[latitude]=${coordsActivos.lat}&drop[longitude]=${coordsActivos.lon}&drop[nickname]=${encodeURIComponent(hotel ? hotel.nombre : lugar)}`);
   }
   async function pedirSugerencia() {
     setBuscandoSug(true); setSugerencia("");
@@ -1745,6 +1779,16 @@ function EnDestino({ lugar, viaje, perfil }) {
     <div style={{ fontSize: 13, fontWeight: 800, color: T.text, marginBottom: 4, display: "flex", alignItems: "center", gap: 7 }}><Ico n="pin" s={15} c={T.accent} /> Ya en {lugar}</div>
     <div style={{ fontSize: 11, color: T.sub, lineHeight: 1.5, marginBottom: 11 }}>Llegaron en avión — acá no tienen auto propio. Esto es lo mismo que tendrían armando el viaje en auto, pero para resolver desde acá.</div>
 
+    <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>🏨 ¿Dónde te hospedás?</div>
+    {hotel ? <div style={{ display: "flex", alignItems: "center", gap: 8, background: T.card2, border: `1px solid ${T.accent}`, borderRadius: 10, padding: "10px 12px", marginBottom: 13 }}>
+      <Ico n="cama" s={14} c={T.accent} />
+      <span style={{ flex: 1, fontSize: 12.5, color: T.text, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hotel.nombre}</span>
+      <button onClick={() => setHotel(null)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="cerrar" s={12} /></button>
+    </div> : <div style={{ marginBottom: 13 }}>
+      <BuscarLugar placeholder="Nombre o dirección del hotel…" onElegir={(r) => setHotel(r)} />
+      <div style={{ fontSize: 10.5, color: T.muted, marginTop: 5 }}>Cargalo y el mapa de acá abajo, Uber y "explorar cerca" se centran justo ahí — no en el centro genérico de {lugar}.</div>
+    </div>}
+
     <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>🚗 Alquilar un auto acá</div>
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
       {[["Kayak Autos", "#FF690F", `https://www.kayak.com.ar/cars/${encodeURIComponent(lugar)}${viaje.fechaInicio ? `/${viaje.fechaInicio}/${viaje.fechaVuelta || viaje.fechaInicio}` : ""}`],
@@ -1760,10 +1804,20 @@ function EnDestino({ lugar, viaje, perfil }) {
     </div>
 
     <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>🗺 Explorar cerca de acá{buscandoCoords ? " (ubicando…)" : ""}</div>
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: hotel ? 10 : 13 }}>
       {[["Restaurantes", "restaurantes"], ["Qué visitar", "lugares turísticos"], ["Souvenirs y regalos", "souvenirs"], ["Supermercado", "supermercado"]]
         .map(([nom, cat]) => <button key={nom} onClick={() => abrirCerca(cat)} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{nom}</button>)}
     </div>
+
+    {hotel && <>
+      {buscandoPoi && <div style={{ fontSize: 11.5, color: T.accent, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><Ico n="varita" s={12} /> Buscando restaurantes, tiendas y equipamiento cerca del hotel…</div>}
+      {errorPoi && <div style={{ fontSize: 11.5, color: T.sub, marginBottom: 10 }}>{errorPoi}</div>}
+      {!buscandoPoi && poi.length > 0 && <>
+        <Mapa puntos={[{ nombre: hotel.nombre, lat: hotel.lat, lon: hotel.lon }]} sugerencias={poi} onAgregarSug={() => { }} alto={280} />
+        <div style={{ fontSize: 10.5, color: T.muted, margin: "8px 0 13px" }}>{poi.length} lugares marcados alrededor del hotel — tocá cada ⭐ para ver qué es.</div>
+      </>}
+      {!buscandoPoi && !errorPoi && poi.length === 0 && <div style={{ fontSize: 11.5, color: T.sub, marginBottom: 13 }}>No encontré lugares cargados en el mapa para esta zona puntual — probá los botones de arriba.</div>}
+    </>}
 
     <button onClick={pedirSugerencia} disabled={buscandoSug} style={{ width: "100%", background: buscandoSug ? T.card2 : T.accent, border: "none", color: buscandoSug ? T.sub : "#1a1205", borderRadius: 9, padding: "12px", fontSize: 12.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
       <Ico n="varita" s={13} /> {buscandoSug ? "Pensando…" : "✨ ¿Qué hacer o alquilar acá?"}
