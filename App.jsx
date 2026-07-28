@@ -195,7 +195,11 @@ async function lugarDesdeFoto(file) {
 
 /* ── Geocodificación / Ruta / Leaflet / IA (igual que v1) ───────── */
 async function geocodificar(q) {
-  const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&accept-language=es&q=${encodeURIComponent(q)}`);
+  // "San Carlos de Bariloche (BRC)" — el código de aeropuerto entre
+  // paréntesis confunde al buscador y puede devolver cualquier cosa en
+  // vez de la ciudad real. Se busca solo con el nombre del lugar.
+  const limpio = (q || "").replace(/\s*\([^)]*\)\s*/g, " ").trim() || q;
+  const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&accept-language=es&q=${encodeURIComponent(limpio)}`);
   if (!r.ok) throw new Error("No pude buscar ese lugar");
   return ((await r.json()) || []).map(x => ({ nombre: x.display_name, lat: +x.lat, lon: +x.lon }));
 }
@@ -401,7 +405,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.81 · 26 jul 2026";
+const APP_VER = "v10.82 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
