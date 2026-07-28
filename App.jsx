@@ -396,7 +396,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.64 · 26 jul 2026";
+const APP_VER = "v10.67 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1532,11 +1532,11 @@ function ReservasGuardadas({ viaje, actualizar, media }) {
 
   return (<div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 14 }}>
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
-      <div style={{ flex: 1, fontSize: 13, fontWeight: 800, color: T.text, display: "flex", alignItems: "center", gap: 7 }}><Ico n="cama" s={15} c={T.accent} /> Itinerario de viaje</div>
+      <div style={{ flex: 1, fontSize: 13, fontWeight: 800, color: T.text, display: "flex", alignItems: "center", gap: 7 }}><Ico n="cama" s={15} c={T.accent} /> Reservas del viaje</div>
       {!form && <button onClick={() => fileRef.current?.click()} style={{ background: "rgba(232,163,61,.12)", border: `1px solid ${T.accent}`, color: T.accent, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>＋ Agregar</button>}
     </div>
     <input ref={fileRef} type="file" accept="image/*,application/pdf" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) procesarArchivo(f); }} style={{ display: "none" }} />
-    {!form && <div style={{ textAlign: "center" }}><button onClick={() => setForm(baseForm(null))} style={{ background: "none", border: "none", color: T.muted, fontSize: 10.5, cursor: "pointer", padding: 4, marginTop: reservas.length ? 4 : 0 }}>o cargar los datos a mano, sin adjuntar nada</button></div>}
+    {!form && <div style={{ textAlign: "center", marginTop: reservas.length ? 8 : 4 }}><button onClick={() => setForm(baseForm(null))} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.sub, fontSize: 11.5, fontWeight: 700, cursor: "pointer", padding: "9px 14px", borderRadius: 9 }}>✏️ Cargar a mano, sin adjuntar nada</button></div>}
 
     {reservas.length === 0 && !form && <div style={{ fontSize: 11.5, color: T.sub, lineHeight: 1.5, marginTop: 4 }}>Cada vez que reserven algo — hotel en Booking, auto, una excursión — cargá el voucher acá. Queda todo junto, a mano, con o sin señal.</div>}
 
@@ -1685,7 +1685,7 @@ function VuelosGuardados({ viaje, actualizar, media, cfg }) {
       {!form && <button onClick={() => fileRef.current?.click()} style={{ background: "rgba(232,163,61,.12)", border: `1px solid ${T.accent}`, color: T.accent, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>＋ Agregar</button>}
     </div>
     <input ref={fileRef} type="file" accept="image/*,application/pdf" onChange={onElegirVoucher} style={{ display: "none" }} />
-    {!form && <div style={{ textAlign: "center" }}><button onClick={() => setForm(baseForm(null))} style={{ background: "none", border: "none", color: T.muted, fontSize: 10.5, cursor: "pointer", padding: 4, marginTop: vuelos.length ? 4 : 0 }}>o cargar los datos a mano, sin adjuntar nada</button></div>}
+    {!form && <div style={{ textAlign: "center", marginTop: vuelos.length ? 8 : 4 }}><button onClick={() => setForm(baseForm(null))} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.sub, fontSize: 11.5, fontWeight: 700, cursor: "pointer", padding: "9px 14px", borderRadius: 9 }}>✏️ Cargar a mano, sin adjuntar nada</button></div>}
     {vuelos.length === 0 && !form && <div style={{ fontSize: 11.5, color: T.sub, lineHeight: 1.5 }}>Si ya tienen el pasaje sacado en otro lado, cargá el número de vuelo, el horario, y adjuntá el boarding pass — queda a mano en el viaje, sin necesitar señal.</div>}
     {vuelos.map(v2 => (<div key={v2.id} style={{ background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 7 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
@@ -2609,8 +2609,8 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
   }
 
   const TABS = viaje.vivido
-    ? [["bitacora", "Bitácora", "libro"], ["ruta", "Mapa del viaje", "mapa"], ["lugar", "Del lugar", "nota"], ["clip", "Clip", "peli"]]
-    : [["ruta", "Planeando mi viaje", "mapa"], ["reservas", "Reservas", "ticket"], ["clima", "Clima", "sol"], ["lugar", "Del lugar", "nota"], ["gastos", "Gastos", "plata"], ["valija", "Valija", "valija"], ["bitacora", "Bitácora", "libro"], ["clip", "Clip", "peli"]];
+    ? [["bitacora", "Itinerario de viaje", "libro"], ["ruta", "Mapa del viaje", "mapa"], ["lugar", "Del lugar", "nota"], ["clip", "Clip", "peli"]]
+    : [["ruta", "Planeando mi viaje", "mapa"], ["reservas", "Reservas", "ticket"], ["bitacora", "Itinerario de viaje", "libro"], ["clima", "Clima", "sol"], ["lugar", "Del lugar", "nota"], ["gastos", "Gastos", "plata"], ["valija", "Valija", "valija"], ["clip", "Clip", "peli"]];
 
   return (<div style={{ minHeight: "100vh", paddingBottom: 90 }}>
     <div style={{ padding: "14px 16px 0", paddingTop: "max(14px, env(safe-area-inset-top))" }}>
@@ -2629,7 +2629,7 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
 
     <div style={{ padding: 16 }}>
       <UpdateBanner />
-      {!(tab === "ruta" && puntos.length === 0 && !modoManualInicial) && <BarraViaje viaje={viaje} actualizar={actualizar} />}
+      {tab === "ruta" && !(puntos.length === 0 && !modoManualInicial) && <BarraViaje viaje={viaje} actualizar={actualizar} />}
 
       {tab === "ruta" && ((puntos.length === 0 && !modoManualInicial) || plannerAbierto) && <PlannerIA viaje={viaje} actualizar={(v2) => { actualizar(v2); setPlannerAbierto(false); }} perfil={perfil} cfg={cfg} onManual={puntos.length === 0 ? () => setModoManualInicial(true) : null} />}
       {tab === "ruta" && viaje.atraccionPrincipal && <div style={{ background: "linear-gradient(135deg, rgba(232,163,61,.14), rgba(77,163,255,.08))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: "12px 14px", marginBottom: 14, display: "flex", gap: 10, alignItems: "flex-start" }}>
