@@ -401,7 +401,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.75 · 26 jul 2026";
+const APP_VER = "v10.76 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -2279,8 +2279,11 @@ function HospedajeLinks({ lugar, f }) {
    si falta algo, lo pide con campos chicos, sin duplicar el cuadro de arriba. */
 function EstimadorCosto({ viaje, perfil, cfg }) {
   const puntos = viaje.puntos || [];
-  const [destino, setDestino] = useState(puntos.length ? puntos[puntos.length - 1].nombre : "");
-  const [desde, setDesde] = useState(viaje.origenViaje || cfg?.casa?.nombre || "Buenos Aires, Argentina");
+  const destinoConocido = puntos.length ? puntos[puntos.length - 1].nombre : "";
+  const desdeConocido = viaje.origenViaje || cfg?.casa?.nombre || "";
+  const [destino, setDestino] = useState(destinoConocido);
+  const [desde, setDesde] = useState(desdeConocido || "Buenos Aires, Argentina");
+  const [editar, setEditar] = useState(!destinoConocido || !desdeConocido);   // solo pregunta si de verdad falta algo
   const dias = Number(viaje.diasVacaciones) || null;
   const [estimando, setEstimando] = useState(false);
   const [estimado, setEstimado] = useState(null);
@@ -2319,10 +2322,14 @@ function EstimadorCosto({ viaje, perfil, cfg }) {
     </div>
     {abierto && <div style={{ marginTop: 11 }}>
       <div style={{ fontSize: 11, color: T.sub, lineHeight: 1.5, marginBottom: 9 }}>Compara avión vs. auto buscando precios reales de nafta, peajes, vuelos y hospedaje.</div>
-      <input value={destino} onChange={e => setDestino(e.target.value)} placeholder="¿A dónde van?"
-        style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "10px 12px", fontSize: 12.5, color: T.text, outline: "none", boxSizing: "border-box", marginBottom: 7 }} />
-      <input value={desde} onChange={e => setDesde(e.target.value)} placeholder="¿Desde dónde salen?"
-        style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "10px 12px", fontSize: 12.5, color: T.text, outline: "none", boxSizing: "border-box", marginBottom: 9 }} />
+      {editar ? <>
+        <input value={destino} onChange={e => setDestino(e.target.value)} placeholder="¿A dónde van?"
+          style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "10px 12px", fontSize: 12.5, color: T.text, outline: "none", boxSizing: "border-box", marginBottom: 7 }} />
+        <input value={desde} onChange={e => setDesde(e.target.value)} placeholder="¿Desde dónde salen?"
+          style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "10px 12px", fontSize: 12.5, color: T.text, outline: "none", boxSizing: "border-box", marginBottom: 9 }} />
+      </> : <div onClick={() => setEditar(true)} style={{ display: "flex", alignItems: "center", gap: 6, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "10px 12px", fontSize: 12.5, color: T.text, fontWeight: 700, cursor: "pointer", marginBottom: 9 }}>
+        <Ico n="pin" s={12} c={T.accent} /> <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{desde.split(",")[0]} → {destino.split(",")[0]}</span>
+      </div>}
       {dias && <div style={{ fontSize: 10.5, color: T.accent, marginBottom: 9 }}>Calculando para {dias} días (los que ya cargaron)</div>}
 
       <button onClick={estimarCosto} disabled={estimando} style={{ width: "100%", background: estimando ? T.card2 : T.accent, border: "none", color: estimando ? T.sub : "#1a1205", borderRadius: 9, padding: "12px", fontSize: 12.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
