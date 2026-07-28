@@ -396,7 +396,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.67 · 26 jul 2026";
+const APP_VER = "v10.68 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1801,12 +1801,23 @@ function EnDestino({ lugar, viaje, perfil }) {
   async function pedirSugerencias() {
     setBuscandoSug(true); setSugerencias([]); setSugerenciaAbierta(null);
     try {
-      const sys = "Sos un guía local muy concreto, con conocimiento profundo del lugar. Respondés SOLO con un array JSON válido, sin texto adicional ni markdown.";
-      const prompt = `${perfil ? `Así viaja esta gente: ${perfil}\n\n` : ""}Están en ${lugar}${coordsActivos ? ` (cerca de lat ${coordsActivos.lat}, lon ${coordsActivos.lon})` : ""}, llegaron en avión, sin auto propio. Según el TIPO de lugar que es (¿zona de nieve/esquí? ¿playa? ¿montaña? ¿ciudad histórica?), nombrame entre 6 y 10 lugares CONCRETOS y reales: dónde alquilar el equipo típico de la zona (esquís, tablas, bicis, lo que corresponda — nada si no aplica), y las actividades/atracciones que no se pueden perder. Cada uno con nombre real del lugar/comercio si lo sabés, no genérico.\n\nRespondé SOLO este JSON:\n[{"nombre":"...","tipo":"alquiler o actividad","desc":"1-2 frases: qué es y por qué","lat":-00.0000,"lon":-00.0000}]`;
-      const resp = await llamarIA([{ role: "user", content: prompt }], sys, 1400);
+      const sys = "Sos un guía local muy concreto, con conocimiento profundo del lugar, que busca información REAL y actual en internet usando la herramienta de búsqueda que tenés disponible. Respondés SOLO con un array JSON válido, sin texto adicional ni markdown. NUNCA inventes un precio que no encontraste buscando — si no encontrás uno confiable, dejá ese campo vacío en vez de inventar.";
+      const prompt = `${perfil ? `Así viaja esta gente: ${perfil}\n\n` : ""}Están en ${lugar}${coordsActivos ? ` (cerca de lat ${coordsActivos.lat}, lon ${coordsActivos.lon})` : ""}, llegaron en avión, sin auto propio. Según el TIPO de lugar que es (¿zona de nieve/esquí? ¿playa? ¿montaña? ¿ciudad histórica?), nombrame entre 6 y 10 lugares CONCRETOS y reales: dónde alquilar el equipo típico de la zona (esquís, tablas, bicis, lo que corresponda — nada si no aplica), y las excursiones/actividades que no se pueden perder. Cada uno con nombre real del lugar/comercio si lo sabés, no genérico. Si es una excursión o actividad paga, buscá el precio de referencia actual — si no lo encontrás confiable, dejalo vacío.\n\nRespondé SOLO este JSON:\n[{"nombre":"...","tipo":"alquiler o actividad","desc":"1-2 frases: qué es y por qué","precio":"precio de referencia si lo encontraste, si no vacío","lat":-00.0000,"lon":-00.0000}]`;
+      const resp = await llamarIAConBusqueda([{ role: "user", content: prompt }], sys, 1800);
       const lista = extraerJSON(resp);
       if (!lista || !lista.length) throw new Error("No encontré nada puntual para acá. Probá de nuevo.");
-      setSugerencias(lista.filter(x => x?.nombre).map(x => ({ ...x, id: uid() })));
+      let sugs = lista.filter(x => x?.nombre).map(x => ({ ...x, id: uid() }));
+
+      // Distancia y tiempo real DESDE EL HOTEL hasta cada sugerencia — la
+      // misma tecnología de ruteo que ya usamos para la ruta aeropuerto-hotel.
+      if (coordsActivos) {
+        sugs = await Promise.all(sugs.map(async (s) => {
+          if (!s.lat || !s.lon) return s;
+          try { const r = await calcularRuta([coordsActivos, { lat: s.lat, lon: s.lon }]); if (r) return { ...s, distanciaHotel: r.dist, duracionHotel: r.dur }; } catch { }
+          return s;
+        }));
+      }
+      setSugerencias(sugs);
     } catch (e) { alert(e.message); }
     setBuscandoSug(false);
   }
@@ -1869,7 +1880,11 @@ function EnDestino({ lugar, viaje, perfil }) {
         </div>
         {sugerenciaAbierta === sg.id && <div style={{ fontSize: 11.5, color: T.sub, lineHeight: 1.5, padding: "0 12px 10px", marginTop: -4 }}>
           {sg.tipo && <span style={{ color: T.accent, fontWeight: 700 }}>{sg.tipo}. </span>}{sg.desc}
-          {sg.lat && sg.lon && <div style={{ marginTop: 6 }}><button onClick={() => abrir(`https://www.google.com/maps/search/${encodeURIComponent(sg.nombre)}/@${sg.lat},${sg.lon},16z`)} style={{ background: T.card, border: `1px solid ${T.border}`, color: T.accent, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Ver en el mapa</button></div>}
+          {(sg.distanciaHotel || sg.precio) && <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 7, fontSize: 11 }}>
+            {sg.distanciaHotel && <span style={{ display: "flex", alignItems: "center", gap: 4, color: T.text, fontWeight: 700 }}><Ico n="auto" s={12} c={T.accent} /> {(sg.distanciaHotel / 1000).toFixed(1)} km · {Math.round(sg.duracionHotel / 60)} min desde el hotel</span>}
+            {sg.precio && <span style={{ display: "flex", alignItems: "center", gap: 4, color: T.text, fontWeight: 700 }}><Ico n="plata" s={12} c={T.accent} /> {sg.precio}</span>}
+          </div>}
+          {sg.lat && sg.lon && <div style={{ marginTop: 8 }}><button onClick={() => abrir(`https://www.google.com/maps/search/${encodeURIComponent(sg.nombre)}/@${sg.lat},${sg.lon},16z`)} style={{ background: T.card, border: `1px solid ${T.border}`, color: T.accent, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Ver en el mapa</button></div>}
         </div>}
       </div>))}
     </div>}
@@ -1943,57 +1958,62 @@ function ReservasTab({ viaje, actualizar, media, cfg, perfil }) {
     {(modo === "avion" || (viaje.vuelos || []).length > 0) && <VuelosGuardados viaje={viaje} actualizar={actualizar} media={media} cfg={cfg} />}
     <ReservasGuardadas viaje={viaje} actualizar={actualizar} media={media} />
 
-    {/* dónde */}
-    {puntos.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>¿Para dónde?</div>}
-    {puntos.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-      {puntos.map((p, i) => { const n = p.nombre.split(",")[0]; const on = !otro && lugarSel === n; return <button key={i} onClick={() => { setLugarSel(n); setOtro(""); }} style={{ background: on ? "rgba(232,163,61,.15)" : T.card, border: `1px solid ${on ? T.accent : T.border}`, color: on ? T.accent : T.sub, borderRadius: 9, padding: "9px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{n}</button>; })}
-    </div>}
-    {puntos.length > 0 && <input value={otro} onChange={e => setOtro(e.target.value)} placeholder="U otro lugar…"
-      style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: T.text, outline: "none", boxSizing: "border-box", marginBottom: 6 }} />}
-    {f && lugar && <div style={{ fontSize: 11.5, color: T.sub, marginBottom: 12 }}>Los enlaces van con fechas: <b style={{ color: T.text }}>{fFecha(f.in)} → {fFecha(f.out)}</b></div>}
-    {!f && <div style={{ height: 8 }} />}
+    {/* Ya reservaron el vuelo: el destino y el modo ya están decididos —
+        todo este bloque de "¿para dónde? / en auto o avión? / buscar
+        vuelos" es ruido repetido a esta altura. Directo a "Ya en destino". */}
+    {(viaje.vuelos || []).length === 0 && <>
+      {/* dónde */}
+      {puntos.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>¿Para dónde?</div>}
+      {puntos.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+        {puntos.map((p, i) => { const n = p.nombre.split(",")[0]; const on = !otro && lugarSel === n; return <button key={i} onClick={() => { setLugarSel(n); setOtro(""); }} style={{ background: on ? "rgba(232,163,61,.15)" : T.card, border: `1px solid ${on ? T.accent : T.border}`, color: on ? T.accent : T.sub, borderRadius: 9, padding: "9px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{n}</button>; })}
+      </div>}
+      {puntos.length > 0 && <input value={otro} onChange={e => setOtro(e.target.value)} placeholder="U otro lugar…"
+        style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: T.text, outline: "none", boxSizing: "border-box", marginBottom: 6 }} />}
+      {f && lugar && <div style={{ fontSize: 11.5, color: T.sub, marginBottom: 12 }}>Los enlaces van con fechas: <b style={{ color: T.text }}>{fFecha(f.in)} → {fFecha(f.out)}</b></div>}
+      {!f && <div style={{ height: 8 }} />}
 
-    {/* cómo viajan a este lugar */}
-    {lugar && <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-      {[["auto", "auto", "En auto"], ["avion", "avion", "En avión"]].map(([k, ic, l]) => <button key={k} onClick={() => setModo(k)} style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1px solid ${modo === k ? T.accent : T.border}`, background: modo === k ? "rgba(232,163,61,.12)" : T.card, color: modo === k ? T.accent : T.sub, fontSize: 12.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Ico n={ic} s={14} /> {l}</button>)}
-    </div>}
+      {/* cómo viajan a este lugar */}
+      {lugar && <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        {[["auto", "auto", "En auto"], ["avion", "avion", "En avión"]].map(([k, ic, l]) => <button key={k} onClick={() => setModo(k)} style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1px solid ${modo === k ? T.accent : T.border}`, background: modo === k ? "rgba(232,163,61,.12)" : T.card, color: modo === k ? T.accent : T.sub, fontSize: 12.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Ico n={ic} s={14} /> {l}</button>)}
+      </div>}
 
-    {lugar && modo === "avion" && <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 10 }}>
-      <div style={{ display: "flex", gap: 8, marginBottom: 11 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 10, color: T.sub, marginBottom: 3 }}>Desde</div>
-          <input value={origenVuelo} onChange={e => setOrigenVuelo(e.target.value)} placeholder="Buenos Aires"
-            style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "9px 10px", fontSize: 12.5, color: T.text, outline: "none", boxSizing: "border-box" }} />
+      {lugar && modo === "avion" && <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 10 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 11 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 10, color: T.sub, marginBottom: 3 }}>Desde</div>
+            <input value={origenVuelo} onChange={e => setOrigenVuelo(e.target.value)} placeholder="Buenos Aires"
+              style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "9px 10px", fontSize: 12.5, color: T.text, outline: "none", boxSizing: "border-box" }} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 10, color: T.sub, marginBottom: 3 }}>Hasta</div>
+            <div style={{ background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "9px 10px", fontSize: 12.5, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lugar}</div>
+          </div>
         </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 10, color: T.sub, marginBottom: 3 }}>Hasta</div>
-          <div style={{ background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "9px 10px", fontSize: 12.5, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lugar}</div>
+
+        <button onClick={buscarVuelosIA} disabled={buscandoVuelos} style={{ width: "100%", background: buscandoVuelos ? T.card2 : T.accent, border: "none", color: buscandoVuelos ? T.sub : "#1a1205", borderRadius: 9, padding: "12px", fontSize: 12.5, fontWeight: 800, cursor: "pointer", marginBottom: 9, display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+          <Ico n="varita" s={13} /> {buscandoVuelos ? "Buscando vuelos reales…" : "Buscar vuelos con IA"}
+        </button>
+        {resultadoVuelos && <div style={{ background: T.card2, border: `1px solid ${T.accent}`, borderRadius: 10, padding: "12px 13px", marginBottom: 13, fontSize: 12.5, color: T.text, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{resultadoVuelos}</div>}
+
+        <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>{resultadoVuelos ? "Ahora sí, a reservar" : "O ir directo a"}</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
+          {[["Google Flights", "#4285F4", `https://www.google.com/travel/flights?q=${encodeURIComponent(`vuelos ${origenVuelo ? "de " + origenVuelo + " " : ""}a ${lugar}` + (f?.in && f?.out ? ` del ${fFechaLarga(f.in)} al ${fFechaLarga(f.out)}` : f?.in ? " el " + fFechaLarga(f.in) : ""))}`],
+            ["Despegar Vuelos", "#4A148C", "https://www.despegar.com.ar/vuelos/"],
+            ["Kayak", "#FF690F", (() => { const co = codigoAeropuerto(origenVuelo), cd = codigoAeropuerto(lugar); return co && cd && f?.in ? `https://www.kayak.com.ar/flights/${co}-${cd}/${f.in}${f.out ? `/${f.out}` : ""}` : `https://www.kayak.com.ar/flights`; })()]]
+            .map(([nom, color, url]) => <button key={nom} onClick={() => abrir(url)} style={{ background: color, border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{nom}</button>)}
         </div>
-      </div>
 
-      <button onClick={buscarVuelosIA} disabled={buscandoVuelos} style={{ width: "100%", background: buscandoVuelos ? T.card2 : T.accent, border: "none", color: buscandoVuelos ? T.sub : "#1a1205", borderRadius: 9, padding: "12px", fontSize: 12.5, fontWeight: 800, cursor: "pointer", marginBottom: 9, display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
-        <Ico n="varita" s={13} /> {buscandoVuelos ? "Buscando vuelos reales…" : "Buscar vuelos con IA"}
-      </button>
-      {resultadoVuelos && <div style={{ background: T.card2, border: `1px solid ${T.accent}`, borderRadius: 10, padding: "12px 13px", marginBottom: 13, fontSize: 12.5, color: T.text, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{resultadoVuelos}</div>}
+        <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>¿A qué región vuelan?</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+          {Object.entries(AEROLINEAS_POR_REGION).map(([k, r]) => <button key={k} onClick={() => setRegion(k)} style={{ background: region === k ? "rgba(232,163,61,.15)" : T.card2, border: `1px solid ${region === k ? T.accent : T.border}`, color: region === k ? T.accent : T.sub, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{r.t}</button>)}
+        </div>
 
-      <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>{resultadoVuelos ? "Ahora sí, a reservar" : "O ir directo a"}</div>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
-        {[["Google Flights", "#4285F4", `https://www.google.com/travel/flights?q=${encodeURIComponent(`vuelos ${origenVuelo ? "de " + origenVuelo + " " : ""}a ${lugar}` + (f?.in && f?.out ? ` del ${fFechaLarga(f.in)} al ${fFechaLarga(f.out)}` : f?.in ? " el " + fFechaLarga(f.in) : ""))}`],
-          ["Despegar Vuelos", "#4A148C", "https://www.despegar.com.ar/vuelos/"],
-          ["Kayak", "#FF690F", (() => { const co = codigoAeropuerto(origenVuelo), cd = codigoAeropuerto(lugar); return co && cd && f?.in ? `https://www.kayak.com.ar/flights/${co}-${cd}/${f.in}${f.out ? `/${f.out}` : ""}` : `https://www.kayak.com.ar/flights`; })()]]
-          .map(([nom, color, url]) => <button key={nom} onClick={() => abrir(url)} style={{ background: color, border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{nom}</button>)}
-      </div>
-
-      <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>¿A qué región vuelan?</div>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-        {Object.entries(AEROLINEAS_POR_REGION).map(([k, r]) => <button key={k} onClick={() => setRegion(k)} style={{ background: region === k ? "rgba(232,163,61,.15)" : T.card2, border: `1px solid ${region === k ? T.accent : T.border}`, color: region === k ? T.accent : T.sub, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{r.t}</button>)}
-      </div>
-
-      <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>Aerolíneas — elegí con quién buscar</div>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {AEROLINEAS_POR_REGION[region].aer.map(([nom, color, url]) => <button key={nom} onClick={() => abrir(url)} style={{ background: color, border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{nom}</button>)}
-      </div>
-    </div>}
+        <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>Aerolíneas — elegí con quién buscar</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {AEROLINEAS_POR_REGION[region].aer.map(([nom, color, url]) => <button key={nom} onClick={() => abrir(url)} style={{ background: color, border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{nom}</button>)}
+        </div>
+      </div>}
+    </>}
 
     {/* EN DESTINO: aterrizaste, ¿ahora qué? Auto de alquiler (no es el
         tuyo), cómo moverte del aeropuerto al hotel, y qué hay para hacer
