@@ -401,7 +401,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.80 · 26 jul 2026";
+const APP_VER = "v10.81 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -654,11 +654,21 @@ function BarraViaje({ viaje, actualizar }) {
     {editando && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginTop: 10, width: "100%", boxSizing: "border-box" }}>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 10.5, color: T.sub, marginBottom: 3 }}>{viaje.vivido ? "Salieron" : "Salida"}</div>
-        <input type="date" value={ini || ""} onChange={e => actualizar({ ...viaje, fechaInicio: e.target.value })} style={{ width: "100%", minWidth: 0, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "10px 6px", fontSize: 12, color: T.text, colorScheme: "dark", boxSizing: "border-box" }} />
+        <input type="date" value={ini || ""} onChange={e => {
+          const nuevaIni = e.target.value;
+          // si ya había vuelta, recalculo los días con la salida nueva; si no, la dejo como estaba
+          const finActual = viaje.fechaVuelta || (ini && dias ? isoMasDiasSimple(ini, dias - 1) : "");
+          const diasNuevo = nuevaIni && finActual ? Math.max(1, diasEntre(nuevaIni, finActual) + 1) : viaje.diasVacaciones;
+          actualizar({ ...viaje, fechaInicio: nuevaIni, fechaVuelta: finActual || viaje.fechaVuelta, diasVacaciones: String(diasNuevo || "") });
+        }} style={{ width: "100%", minWidth: 0, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "10px 6px", fontSize: 12, color: T.text, colorScheme: "dark", boxSizing: "border-box" }} />
       </div>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 10.5, color: T.sub, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{viaje.vivido ? "Cuántos días" : "Días de vacaciones"}</div>
-        <input type="number" value={viaje.diasVacaciones || ""} onChange={e => actualizar({ ...viaje, diasVacaciones: e.target.value })} placeholder="14" style={{ width: "100%", minWidth: 0, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "10px 6px", fontSize: 12, color: T.text, boxSizing: "border-box" }} />
+        <div style={{ fontSize: 10.5, color: T.sub, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{viaje.vivido ? "Volvieron" : "Vuelta"}</div>
+        <input type="date" min={ini || undefined} value={viaje.fechaVuelta || (ini && dias ? isoMasDiasSimple(ini, dias - 1) : "")} onChange={e => {
+          const nuevaVuelta = e.target.value;
+          const diasNuevo = ini && nuevaVuelta ? Math.max(1, diasEntre(ini, nuevaVuelta) + 1) : viaje.diasVacaciones;
+          actualizar({ ...viaje, fechaVuelta: nuevaVuelta, diasVacaciones: String(diasNuevo || "") });
+        }} style={{ width: "100%", minWidth: 0, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "10px 6px", fontSize: 12, color: T.text, colorScheme: "dark", boxSizing: "border-box" }} />
       </div>
     </div>}
   </div>);
