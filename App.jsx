@@ -396,7 +396,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.68 · 26 jul 2026";
+const APP_VER = "v10.69 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -2275,6 +2275,8 @@ function PlannerIA({ viaje, actualizar, perfil, cfg, onManual }) {
   const [fechaVuelta, setFechaVuelta] = useState(viaje.fechaInicio && viaje.diasVacaciones ? isoMasDiasSimple(viaje.fechaInicio, Number(viaje.diasVacaciones) - 1) : "");
   const dias = fechaIda && fechaVuelta ? Math.max(1, diasEntre(fechaIda, fechaVuelta) + 1) : "14";   // se calcula solo de las dos fechas — nunca se pide como número suelto
   const [armando, setArmando] = useState(false);
+  const [estimando, setEstimando] = useState(false);
+  const [estimado, setEstimado] = useState(null);
   const [cambiarDesde, setCambiarDesde] = useState(!cfg?.casa);   // si hay Mi Casa, arranca sin pedir nada
 
   async function armar() {
@@ -2303,6 +2305,33 @@ function PlannerIA({ viaje, actualizar, perfil, cfg, onManual }) {
     setArmando(false);
   }
 
+  async function estimarCosto() {
+    if (!destino.trim()) { alert("Decime a dónde quieren ir, primero."); return; }
+    setEstimando(true); setEstimado(null);
+    try {
+      // La distancia por auto la calculamos NOSOTROS con ruteo real — no
+      // hace falta que la IA la adivine, así hay un dato objetivo fijo
+      // y la IA solo tiene que buscar precios (nafta, peajes, vuelos, etc).
+      let distanciaKm = null;
+      try {
+        const [geoDesde, geoDestino] = await Promise.all([geocodificar(desde), geocodificar(destino)]);
+        if (geoDesde?.[0] && geoDestino?.[0]) {
+          const ruta = await calcularRuta([geoDesde[0], geoDestino[0]]);
+          if (ruta) distanciaKm = Math.round(ruta.dist / 1000);
+        }
+      } catch { }
+
+      const sys = "Sos un planificador de viajes que busca precios REALES y actuales en internet (nafta, peajes, vuelos, hospedaje) usando la herramienta de búsqueda que tenés disponible. Respondés SOLO con un JSON válido, sin texto adicional ni markdown. NUNCA inventes un número que no encontraste buscando — si no tenés un dato confiable, dalo como rango amplio y aclaralo, nunca calles la incertidumbre.";
+      const prompt = `${perfil ? `Así viaja esta gente: ${perfil}\n\n` : ""}Quieren viajar de ${desde} a ${destino}, ${dias} días.${distanciaKm ? ` La distancia real por ruta es ${distanciaKm} km (dato ya calculado, usalo tal cual).` : ""}\n\nEstimame el costo total del viaje de DOS formas, buscando precios de referencia actuales:\n1. EN AVIÓN: pasaje ida y vuelta (por persona, precio de referencia actual) + hospedaje para ${dias} noches + estimado de comida y traslados locales.\n2. EN AUTO: nafta ida y vuelta (según la distancia y el precio de combustible actual) + peajes estimados de esa ruta + hospedaje en el camino y en destino para ${dias} días + comida.\n\nRespondé SOLO este JSON:\n{"avion":{"total":"rango en $ (aclarando por persona o total, y la moneda)","desglose":"1-2 frases: pasaje + hospedaje + el resto"},"auto":{"total":"rango en $ (aclarando si es por el auto o por persona, y la moneda)","desglose":"1-2 frases: nafta + peajes + hospedaje"}}`;
+      const resp = await llamarIAConBusqueda([{ role: "user", content: prompt }], sys, 1200);
+      const j = resp.match(/\{[\s\S]*\}/);
+      const est = j ? JSON.parse(j[0]) : null;
+      if (!est || (!est.avion && !est.auto)) throw new Error("No pude armar una estimación confiable ahora. Probá de nuevo.");
+      setEstimado({ ...est, distanciaKm });
+    } catch (e) { alert(e.message); }
+    setEstimando(false);
+  }
+
   return (<div style={{ background: "linear-gradient(135deg, rgba(232,163,61,.12), rgba(77,163,255,.07))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: 16, marginBottom: 16 }}>
     <div style={{ fontSize: 15, fontWeight: 800, color: T.text, marginBottom: 3 }}><Ico n="varita" s={17} c={T.accent} /> ¿A dónde quieren ir?</div>
     <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.55, marginBottom: 12 }}>{perfil ? "La IA ya sabe cómo viajan ustedes. Decile el destino y arma el itinerario a su medida." : "Tip: cargá su estilo de viaje en Ajustes ⚙ y el itinerario sale hecho para ustedes."}</div>
@@ -2325,6 +2354,25 @@ function PlannerIA({ viaje, actualizar, perfil, cfg, onManual }) {
         <Ico n="pin" s={12} c={T.accent} /> <span>Salen desde {desde.split(",")[0]}</span>
       </div>}
     <button onClick={armar} disabled={armando} style={{ width: "100%", background: armando ? T.card2 : T.accent, border: "none", color: armando ? T.sub : "#1a1205", borderRadius: T.rsm, padding: "14px", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>{armando ? "Armando su itinerario…" : <><Ico n="varita" s={13} /> Armar el viaje</>}</button>
+
+    <button onClick={estimarCosto} disabled={estimando} style={{ width: "100%", background: "none", border: `1px solid ${T.border}`, color: estimando ? T.muted : T.sub, borderRadius: T.rsm, padding: "12px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+      <Ico n="plata" s={13} /> {estimando ? "Buscando precios reales…" : "💰 ¿Cuánto me va a salir? (avión vs. auto)"}
+    </button>
+    {estimado && <div style={{ marginTop: 10 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+        {estimado.avion && <div style={{ flex: 1, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 12px" }}>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 4, display: "flex", alignItems: "center", gap: 5 }}><Ico n="avion" s={11} /> En avión</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: T.text, marginBottom: 4 }}>{estimado.avion.total}</div>
+          <div style={{ fontSize: 10.5, color: T.sub, lineHeight: 1.45 }}>{estimado.avion.desglose}</div>
+        </div>}
+        {estimado.auto && <div style={{ flex: 1, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 12px" }}>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 4, display: "flex", alignItems: "center", gap: 5 }}><Ico n="auto" s={11} /> En auto{estimado.distanciaKm ? ` (${estimado.distanciaKm} km)` : ""}</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: T.text, marginBottom: 4 }}>{estimado.auto.total}</div>
+          <div style={{ fontSize: 10.5, color: T.sub, lineHeight: 1.45 }}>{estimado.auto.desglose}</div>
+        </div>}
+      </div>
+      <div style={{ fontSize: 10, color: T.muted, lineHeight: 1.5, textAlign: "center", fontStyle: "italic" }}>Estos precios son orientativos — pueden salir más altos o más bajos según cómo viajen. No es una reserva ni un presupuesto cerrado.</div>
+    </div>}
     {onManual && <button onClick={onManual} style={{ width: "100%", background: "none", border: "none", color: T.muted, fontSize: 11.5, cursor: "pointer", padding: "9px 0 0" }}>o armarlo a mano, punto por punto</button>}
   </div>);
 }
