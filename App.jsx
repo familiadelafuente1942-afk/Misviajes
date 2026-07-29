@@ -414,7 +414,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.96 · 26 jul 2026";
+const APP_VER = "v10.97 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1769,7 +1769,11 @@ function VuelosGuardados({ viaje, actualizar, media, cfg }) {
     }
 
     setGuardandoExtra(false);
-    actualizar({ ...viaje, vuelos: [...vuelos, vuelo], puntos: puntosNuevos, bitacora: bitacoraNueva });
+    // Si el viaje seguía con el nombre genérico ("Nuevo viaje", el que le
+    // pone la app al crearlo), ahora que ya sabemos el destino, se lo
+    // ponemos — así en la lista de inicio dice "Bariloche", no "Nuevo viaje".
+    const nombreNuevo = (!viaje.nombre || viaje.nombre === "Nuevo viaje") && puntosNuevos.length ? puntosNuevos[puntosNuevos.length - 1].nombre.split(",")[0] : viaje.nombre;
+    actualizar({ ...viaje, nombre: nombreNuevo, vuelos: [...vuelos, vuelo], puntos: puntosNuevos, bitacora: bitacoraNueva });
     setForm(null);
   }
   function borrar(id) {
