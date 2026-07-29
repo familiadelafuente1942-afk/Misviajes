@@ -474,7 +474,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.113 · 26 jul 2026";
+const APP_VER = "v10.114 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1252,16 +1252,39 @@ function limpiarVozTexto(t) {
     .replace(/\[\[LUGAR:([^\]|]+)(?:\|[^\]]*)?\]\]/g, "$1")
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "").replace(/[*_#>`]/g, "").replace(/\s+/g, " ").trim();
 }
+// iPhone no deja "hablar" a una app si el pedido no viene de un toque
+// directo. Cuando la respuesta del copiloto llega segundos después, ese
+// permiso ya venció y el iPhone la silencia sin avisar. Solución: en el
+// mismo toque del micrófono le damos un empujón silencioso, y ahí queda
+// habilitado para hablar solo cuando llegue la respuesta.
+function desbloquearVoz() {
+  try {
+    if (!window.speechSynthesis) return;
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+  } catch { }
+}
 function hablarTexto(texto) {
   try {
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(limpiarVozTexto(texto).slice(0, 1200));
-    u.lang = "es-AR"; u.rate = 1.02;
-    const voces = window.speechSynthesis.getVoices() || [];
-    const v2 = voces.find(x => /es[-_](AR|MX|US|419)/i.test(x.lang)) || voces.find(x => /^es/i.test(x.lang));
-    if (v2) u.voice = v2;
-    window.speechSynthesis.speak(u);
+    let yaDijo = false;
+    const decir = () => {
+      if (yaDijo) return; yaDijo = true;
+      const u = new SpeechSynthesisUtterance(limpiarVozTexto(texto).slice(0, 1200));
+      u.lang = "es-AR"; u.rate = 1.02;
+      const voces = window.speechSynthesis.getVoices() || [];
+      const v2 = voces.find(x => /es[-_](AR|MX|US|419)/i.test(x.lang)) || voces.find(x => /^es/i.test(x.lang));
+      if (v2) u.voice = v2;
+      window.speechSynthesis.speak(u);
+    };
+    // En iPhone la lista de voces a veces llega un instante después.
+    if ((window.speechSynthesis.getVoices() || []).length) decir();
+    else {
+      try { window.speechSynthesis.onvoiceschanged = decir; } catch { }
+      setTimeout(decir, 400);   // por si ese aviso no llega nunca
+    }
   } catch { }
 }
 function usarDictado({ setTexto, onEnviar }) {
@@ -1304,6 +1327,7 @@ function usarDictado({ setTexto, onEnviar }) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { alert("Este navegador no permite dictar. Usá el micrófono del teclado."); return; }
     try { window.speechSynthesis?.cancel(); } catch { }
+    desbloquearVoz();   // este toque habilita que después pueda contestar hablando
     if (escuchando) { parar(true); return; }
     arrancar(false);
   }
@@ -2486,6 +2510,7 @@ function TextoConLugares({ texto, origen, onSumarAlMapa }) {
   };
   return (<>
     <div style={{ whiteSpace: "pre-wrap" }}>{limpio}</div>
+    <button onClick={() => hablarTexto(texto)} title="Escuchar esta respuesta" style={{ background: "none", border: "none", color: T.muted, cursor: "pointer", fontSize: 15, padding: "4px 0 0" }}>🔊</button>
     {lugares.length > 0 && <div style={{ marginTop: 9, paddingTop: 9, borderTop: `1px solid ${T.border}` }}>
       <div style={{ fontSize: 10, color: T.muted, marginBottom: 5 }}>{origen ? `Cómo llegar desde ${(origen.nombre || "acá").split(",")[0]}:` : "Ver en el mapa:"}</div>
       {lugares.map((l, i) => (<div key={i} style={{ display: "flex", gap: 5, marginBottom: 5 }}>
@@ -2870,7 +2895,18 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
   const [err, setErr] = useState("");
   const [sugiriendo, setSugiriendo] = useState(false);
   const [chatAbierto, setChatAbierto] = useState(false);
-  const [chatMsgs, setChatMsgs] = useState([]);
+  // La charla con el copiloto se guarda EN EL VIAJE: así el hilo sigue ahí
+  // cuando saliste a ver el mapa, cargaste algo, y volvés. Guardo los
+  // últimos 40 mensajes para no inflar el viaje sin límite.
+  const viajeRef = useRef(viaje); viajeRef.current = viaje;
+  const [chatMsgs, setChatMsgsLocal] = useState(viaje.chatMsgs || []);
+  const chatMsgsRef = useRef(viaje.chatMsgs || []);
+  const setChatMsgs = (updater) => {
+    const next = typeof updater === "function" ? updater(chatMsgsRef.current) : updater;
+    chatMsgsRef.current = next;
+    setChatMsgsLocal(next);
+    actualizar({ ...viajeRef.current, chatMsgs: next.slice(-40) });
+  };
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
   const porVozRefC = useRef(false);
