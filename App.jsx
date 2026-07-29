@@ -474,7 +474,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.112 · 26 jul 2026";
+const APP_VER = "v10.113 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -667,7 +667,10 @@ function Mapa({ puntos, linea, sugerencias, onAgregarSug, alto = 320 }) {
     }).catch(() => { });
   }, [medPts, midiendo]);
 
-  return (<div style={{ position: "relative" }}>
+  // `zIndex: 0` acá es clave: encierra al mapa en su propia capa. Sin esto,
+  // los controles internos del mapa (que usan capas muy altas) se dibujan
+  // ENCIMA del chat y de cualquier pantalla que se abra arriba.
+  return (<div style={{ position: "relative", zIndex: 0, isolation: "isolate" }}>
     <div ref={ref} style={{ height: alto, borderRadius: T.rsm, overflow: "hidden", border: `1px solid ${T.border}`, background: T.card2 }} />
     {/* medidor estilo Google Maps */}
     <div style={{ position: "absolute", top: 9, right: 9, zIndex: 500, display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
@@ -960,7 +963,7 @@ function MapaRecuerdos({ viaje, entradas, media, lugarSel, setLugarSel, onBorrar
   const deEntrada = (en) => (en.mediaIds || []).map(id => media.find(m => m.id === id)).filter(Boolean);
 
   return (<div>
-    <div ref={ref} style={{ height: 300, borderRadius: T.rsm, overflow: "hidden", border: `1px solid ${T.border}`, background: "#0a0d12" }} />
+    <div ref={ref} style={{ height: 300, borderRadius: T.rsm, overflow: "hidden", border: `1px solid ${T.border}`, background: "#0a0d12", position: "relative", zIndex: 0, isolation: "isolate" }} />
     {lista.length === 0 && <div style={{ textAlign: "center", color: T.muted, fontSize: 12.5, padding: "18px 20px", lineHeight: 1.6 }}>Todavía no hay recuerdos anclados al mapa.<br />Escribí una entrada y marcá el lugar.</div>}
     {lista.length > 0 && !lugarSel && <div style={{ fontSize: 12, color: T.sub, textAlign: "center", marginTop: 10 }}>Tocá un punto del mapa para revivir lo de ese lugar ({lista.length} lugar{lista.length > 1 ? "es" : ""} con recuerdos)</div>}
     {lugarSel && <div style={{ marginTop: 12 }}>
@@ -1243,7 +1246,11 @@ function ClipMaker({ viaje, media }) {
    sistema si la pregunta entró hablando. */
 const PAUSA_VOZ = 3000;
 function limpiarVozTexto(t) {
-  return String(t || "").replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "").replace(/[*_#>`]/g, "").replace(/\s+/g, " ").trim();
+  return String(t || "")
+    // Las marcas de lugar del copiloto ([[LUGAR:Nombre|Ciudad]]) no se leen:
+    // se lee solo el nombre, como lo diría una persona.
+    .replace(/\[\[LUGAR:([^\]|]+)(?:\|[^\]]*)?\]\]/g, "$1")
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "").replace(/[*_#>`]/g, "").replace(/\s+/g, " ").trim();
 }
 function hablarTexto(texto) {
   try {
@@ -3171,9 +3178,9 @@ ${resumenPuntos()}${hotelCtx}${vuelosCtx}${reservasCtx}${dondeCtx}${ruta ? `\nDi
       {tab === "clip" && <ClipMaker viaje={viaje} media={media} />}
     </div>
 
-    <button onClick={() => setChatAbierto(true)} style={{ position: "fixed", right: 18, bottom: "max(18px, env(safe-area-inset-bottom))", width: 58, height: 58, borderRadius: "50%", background: T.accent, border: "none", boxShadow: "0 6px 20px rgba(232,163,61,.4)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}><Ico n="chat" s={26} c="#1a1205" /></button>
+    <button onClick={() => setChatAbierto(true)} style={{ position: "fixed", right: 18, bottom: "max(18px, env(safe-area-inset-bottom))", width: 58, height: 58, borderRadius: "50%", background: T.accent, border: "none", boxShadow: "0 6px 20px rgba(232,163,61,.4)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1500 }}><Ico n="chat" s={26} c="#1a1205" /></button>
 
-    {chatAbierto && <div style={{ position: "fixed", inset: 0, zIndex: 100, background: T.bg, display: "flex", flexDirection: "column" }}>
+    {chatAbierto && <div style={{ position: "fixed", inset: 0, zIndex: 3000, background: T.bg, display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top))", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${T.border}` }}>
         <button onClick={() => setChatAbierto(false)} style={{ background: "none", border: "none", color: T.text, cursor: "pointer", padding: 4 }}><Ico n="volver" s={22} /></button>
         <div>
