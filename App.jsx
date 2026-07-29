@@ -414,7 +414,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.97 · 26 jul 2026";
+const APP_VER = "v10.98 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -702,7 +702,9 @@ function Mini({ m, onBorrar, sel, onSel, tam = 92 }) {
 }
 
 /* ═══ BITÁCORA: el diario del viaje ══════════════════════════════ */
-function Bitacora({ viaje, actualizar, media, recargarMedia, hotel, setHotel }) {
+function Bitacora({ viaje, actualizar, media, recargarMedia, hotel, setHotel, poi, setPoi, rutaHotel, setRutaHotel, sugerencias, setSugerencias, sugerenciaAbierta, setSugerenciaAbierta, perfil }) {
+  const puntos = viaje.puntos || [];
+  const lugarDestino = puntos.length ? puntos[puntos.length - 1].nombre.split(",")[0] : "";
   const fileRef = useRef(null);
   const [texto, setTexto] = useState("");
   // Un viaje vivido no arranca en "hoy": arranca el día después de la última
@@ -769,20 +771,14 @@ function Bitacora({ viaje, actualizar, media, recargarMedia, hotel, setHotel }) 
   const deEntrada = (en) => (en.mediaIds || []).map(id => media.find(m => m.id === id)).filter(Boolean);
 
   return (<div>
-    {/* Desde dónde arranca el itinerario — el mismo campo que "Ya en
-        destino", pero acá también: sin esto, el itinerario no sabe de
-        dónde partir. Cargarlo acá ya lo deja marcado como primera parada. */}
-    {setHotel && <div style={{ background: hotel ? T.card2 : T.card, border: `1px solid ${hotel ? T.border : T.accent}`, borderRadius: T.r, padding: "12px 13px", marginBottom: 14 }}>
-      {hotel ? <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <Ico n="cama" s={14} c={T.accent} />
-        <span style={{ flex: 1, fontSize: 12.5, color: T.text, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hotel.nombre}</span>
-        <button onClick={() => setHotel(null)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="cerrar" s={12} /></button>
-      </div> : <>
-        <div style={{ fontSize: 12.5, fontWeight: 800, color: T.text, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}><Ico n="cama" s={14} c={T.accent} /> ¿Dónde te hospedás?</div>
-        <BuscarLugar placeholder="Nombre o dirección del hotel…" onElegir={(r) => setHotel(r)} />
-        <div style={{ fontSize: 10.5, color: T.muted, marginTop: 5 }}>Así el itinerario arranca desde ahí — queda marcado como el primer punto.</div>
-      </>}
-    </div>}
+    {/* "Ya en destino" vive ACÁ, no en Reservas — porque reservar ya
+        terminó (volaste, tenés hotel), y ahora arranca el itinerario de
+        verdad: cómo moverte, qué hacer, dónde comer, desde el hotel. */}
+    {viaje.modoViaje === "avion" && lugarDestino && <EnDestino lugar={lugarDestino} viaje={viaje} perfil={perfil}
+      hotel={hotel} setHotel={setHotel} poi={poi} setPoi={setPoi}
+      rutaHotel={rutaHotel} setRutaHotel={setRutaHotel}
+      sugerencias={sugerencias} setSugerencias={setSugerencias}
+      sugerenciaAbierta={sugerenciaAbierta} setSugerenciaAbierta={setSugerenciaAbierta} />}
 
     {/* nueva entrada */}
     <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: 14, marginBottom: 16 }}>
@@ -2132,15 +2128,6 @@ function ReservasTab({ viaje, actualizar, media, cfg, perfil, hotelDestino, setH
     </>}
 
     {/* EN DESTINO: aterrizaste, ¿ahora qué? Auto de alquiler (no es el
-        tuyo), cómo moverte del aeropuerto al hotel, y qué hay para hacer
-        alrededor — la misma riqueza que tiene el modo auto, pero pensada
-        para cuando llegaste en avión y no tenés vehículo propio ahí. */}
-    {lugar && modo === "avion" && <EnDestino lugar={lugar} viaje={viaje} perfil={perfil}
-      hotel={hotelDestino} setHotel={setHotelDestino} poi={poiDestino} setPoi={setPoiDestino}
-      rutaHotel={rutaHotelDestino} setRutaHotel={setRutaHotelDestino}
-      sugerencias={sugerenciasDestino} setSugerencias={setSugerenciasDestino}
-      sugerenciaAbierta={sugerenciaAbiertaDestino} setSugerenciaAbierta={setSugerenciaAbiertaDestino} />}
-
     {/* secciones */}
     {lugar && modo === "auto" && SECCIONES.map(([tit, links]) => { const [ic, titulo] = tit.split(":"); return (<div key={tit} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "12px 13px", marginBottom: 10 }}>
       <div style={{ fontSize: 12.5, fontWeight: 800, color: T.text, marginBottom: 8, display: "flex", alignItems: "center", gap: 7 }}><Ico n={ic} s={14} c={T.accent} /> {titulo}</div>
@@ -2733,7 +2720,7 @@ function ClimaTab({ viaje, onResumen }) {
 /* ═══ PANTALLA DE UN VIAJE (pestañas: Ruta / Bitácora / Clip) ════ */
 function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
   const perfil = perfilTexto(cfg);
-  const [tab, setTab] = useState(viaje.vivido ? "bitacora" : ((viaje.puntos || []).length === 0 ? "ruta" : (viaje.modoViaje === "avion" ? "reservas" : "ruta")));
+  const [tab, setTab] = useState(viaje.vivido ? "bitacora" : ((viaje.puntos || []).length === 0 ? "ruta" : (((viaje.vuelos || []).length > 0 || (viaje.reservas || []).length > 0) ? "bitacora" : "ruta")));
   const [ruta, setRuta] = useState(null);
   const [calc, setCalc] = useState(false);
   const [err, setErr] = useState("");
@@ -2995,7 +2982,11 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
       {tab === "lugar" && <DelLugarTab viaje={viaje} perfil={perfil} actualizar={actualizar} />}
       {tab === "gastos" && <GastosTab viaje={viaje} actualizar={actualizar} />}
       {tab === "valija" && <ValijaTab viaje={viaje} perfil={perfil} climaResumen={climaResumen} actualizar={actualizar} />}
-      {tab === "bitacora" && <Bitacora viaje={viaje} actualizar={actualizar} media={media} recargarMedia={recargarMedia} hotel={hotelDestino} setHotel={setHotelDestino} />}
+      {tab === "bitacora" && <Bitacora viaje={viaje} actualizar={actualizar} media={media} recargarMedia={recargarMedia} perfil={perfil}
+        hotel={hotelDestino} setHotel={setHotelDestino} poi={poiDestino} setPoi={setPoiDestino}
+        rutaHotel={rutaHotelDestino} setRutaHotel={setRutaHotelDestino}
+        sugerencias={sugerenciasDestino} setSugerencias={setSugerenciasDestino}
+        sugerenciaAbierta={sugerenciaAbiertaDestino} setSugerenciaAbierta={setSugerenciaAbiertaDestino} />}
       {tab === "clip" && <ClipMaker viaje={viaje} media={media} />}
     </div>
 
