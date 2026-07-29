@@ -405,7 +405,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.83 · 26 jul 2026";
+const APP_VER = "v10.84 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1767,19 +1767,14 @@ function VuelosGuardados({ viaje, actualizar, media, cfg }) {
 /* ═══ EN DESTINO: aterrizaste en avión, ahora la misma riqueza que
    tiene el modo auto — auto de alquiler, cómo moverte, y qué hay
    alrededor. Todo pensado para cuando NO tenés vehículo propio ahí. ══ */
-function EnDestino({ lugar, viaje, perfil }) {
+function EnDestino({ lugar, viaje, perfil, hotel, setHotel, poi, setPoi, rutaHotel, setRutaHotel, sugerencias, setSugerencias, sugerenciaAbierta, setSugerenciaAbierta }) {
   const puntos = viaje.puntos || [];
   const punto = puntos.find(p => p.nombre.split(",")[0] === lugar);
   const [coords, setCoords] = useState(punto ? { lat: punto.lat, lon: punto.lon } : null);
   const [buscandoCoords, setBuscandoCoords] = useState(!punto);
-  const [sugerencias, setSugerencias] = useState([]);     // ahora es una LISTA tocable, no un párrafo
-  const [sugerenciaAbierta, setSugerenciaAbierta] = useState(null);
   const [buscandoSug, setBuscandoSug] = useState(false);
-  const [hotel, setHotel] = useState(null);
-  const [poi, setPoi] = useState([]);
   const [buscandoPoi, setBuscandoPoi] = useState(false);
   const [errorPoi, setErrorPoi] = useState("");
-  const [rutaHotel, setRutaHotel] = useState(null);   // la línea del último lugar de bitácora (ej: el aeropuerto) hasta el hotel
   const coordsActivos = hotel || coords;
 
   // El último lugar marcado en la bitácora de este viaje CON ubicación —
@@ -1910,7 +1905,7 @@ function EnDestino({ lugar, viaje, perfil }) {
   </div>);
 }
 
-function ReservasTab({ viaje, actualizar, media, cfg, perfil }) {
+function ReservasTab({ viaje, actualizar, media, cfg, perfil, hotelDestino, setHotelDestino, poiDestino, setPoiDestino, rutaHotelDestino, setRutaHotelDestino, sugerenciasDestino, setSugerenciasDestino, sugerenciaAbiertaDestino, setSugerenciaAbiertaDestino }) {
   const puntos = viaje.puntos || [];
   const fp = fechasParada(viaje);
   const [lugarSel, setLugarSel] = useState(puntos.length ? puntos[puntos.length - 1].nombre.split(",")[0] : "");
@@ -2038,7 +2033,11 @@ function ReservasTab({ viaje, actualizar, media, cfg, perfil }) {
         tuyo), cómo moverte del aeropuerto al hotel, y qué hay para hacer
         alrededor — la misma riqueza que tiene el modo auto, pero pensada
         para cuando llegaste en avión y no tenés vehículo propio ahí. */}
-    {lugar && modo === "avion" && <EnDestino lugar={lugar} viaje={viaje} perfil={perfil} />}
+    {lugar && modo === "avion" && <EnDestino lugar={lugar} viaje={viaje} perfil={perfil}
+      hotel={hotelDestino} setHotel={setHotelDestino} poi={poiDestino} setPoi={setPoiDestino}
+      rutaHotel={rutaHotelDestino} setRutaHotel={setRutaHotelDestino}
+      sugerencias={sugerenciasDestino} setSugerencias={setSugerenciasDestino}
+      sugerenciaAbierta={sugerenciaAbiertaDestino} setSugerenciaAbierta={setSugerenciaAbiertaDestino} />}
 
     {/* secciones */}
     {lugar && modo === "auto" && SECCIONES.map(([tit, links]) => { const [ic, titulo] = tit.split(":"); return (<div key={tit} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "12px 13px", marginBottom: 10 }}>
@@ -2661,6 +2660,13 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
   // no se pierde si vas a Reservas y volvés a Planeando mi viaje.
   const [costoEstimado, setCostoEstimado] = useState(null);
   const [costoAbierto, setCostoAbierto] = useState(false);
+  // Lo mismo para "Ya en destino" — el hotel, los lugares cercanos y las
+  // sugerencias no se pierden si cambiás de pestaña y volvés.
+  const [hotelDestino, setHotelDestino] = useState(null);
+  const [poiDestino, setPoiDestino] = useState([]);
+  const [rutaHotelDestino, setRutaHotelDestino] = useState(null);
+  const [sugerenciasDestino, setSugerenciasDestino] = useState([]);
+  const [sugerenciaAbiertaDestino, setSugerenciaAbiertaDestino] = useState(null);
 
   const puntos = viaje.puntos || [];
   const sugerencias = viaje.sugerencias || [];
@@ -2857,7 +2863,11 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
       </>}
 
       {tab === "clima" && <ClimaTab viaje={viaje} onResumen={setClimaResumen} />}
-      {tab === "reservas" && <ReservasTab viaje={viaje} actualizar={actualizar} media={media} cfg={cfg} perfil={perfil} />}
+      {tab === "reservas" && <ReservasTab viaje={viaje} actualizar={actualizar} media={media} cfg={cfg} perfil={perfil}
+        hotelDestino={hotelDestino} setHotelDestino={setHotelDestino} poiDestino={poiDestino} setPoiDestino={setPoiDestino}
+        rutaHotelDestino={rutaHotelDestino} setRutaHotelDestino={setRutaHotelDestino}
+        sugerenciasDestino={sugerenciasDestino} setSugerenciasDestino={setSugerenciasDestino}
+        sugerenciaAbiertaDestino={sugerenciaAbiertaDestino} setSugerenciaAbiertaDestino={setSugerenciaAbiertaDestino} />}
       {tab === "lugar" && <DelLugarTab viaje={viaje} perfil={perfil} actualizar={actualizar} />}
       {tab === "gastos" && <GastosTab viaje={viaje} actualizar={actualizar} />}
       {tab === "valija" && <ValijaTab viaje={viaje} perfil={perfil} climaResumen={climaResumen} actualizar={actualizar} />}
