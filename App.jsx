@@ -203,6 +203,15 @@ async function geocodificar(q) {
   if (!r.ok) throw new Error("No pude buscar ese lugar");
   return ((await r.json()) || []).map(x => ({ nombre: x.display_name, lat: +x.lat, lon: +x.lon }));
 }
+// Distancia real en metros entre dos coordenadas (fórmula de Haversine) —
+// para saber si dos anclas de bitácora son "el mismo lugar" aunque el GPS
+// haya quedado un poquito distinto entre una y otra.
+function distanciaMetros(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180, dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 async function calcularRuta(puntos) {
   if (puntos.length < 2) return null;
   const coords = puntos.map(p => `${p.lon},${p.lat}`).join(";");
@@ -405,7 +414,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.94 · 26 jul 2026";
+const APP_VER = "v10.96 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -834,15 +843,22 @@ function Bitacora({ viaje, actualizar, media, recargarMedia, hotel, setHotel }) 
    qué vivieron, las fotos, los videos. El viaje entero, en un mapa. */
 function MapaRecuerdos({ viaje, entradas, media, lugarSel, setLugarSel, onBorrarEntrada }) {
   const ref = useRef(null); const mapRef = useRef(null); const capaRef = useRef(null);
-  // agrupar entradas por lugar (misma coordenada redondeada = mismo lugar)
+  // Reconoce las entradas automáticas por su etiqueta (las nuevas) O por
+  // el texto exacto que la app siempre usó para crearlas (las viejas, de
+  // antes de este arreglo) — así también sana lo que ya tenías guardado.
+  const esEntradaVuelo = (e) => e.origenAuto === "vuelo" || /^Llegamos a .+Acá arranca el viaje\.$/.test(e.texto || "");
+  const esEntradaHotel = (e) => e.origenAuto === "hotel" || /^Llegamos al hotel — /.test(e.texto || "");
+  // agrupar entradas por CERCANÍA real (no coordenada exacta) — una foto
+  // anclada con el GPS, un poquito distinta a la dirección geocodificada
+  // del hotel, tiene que caer igual en el mismo ícono, no crear uno aparte.
   const conLugar = entradas.filter(e => e.lugar && e.lugar.lat);
-  const grupos = {};
+  const gruposArr = [];
   conLugar.forEach(e => {
-    const k = `${e.lugar.lat.toFixed(3)},${e.lugar.lon.toFixed(3)}`;
-    if (!grupos[k]) grupos[k] = { lugar: e.lugar, entradas: [] };
-    grupos[k].entradas.push(e);
+    const existente = gruposArr.find(g => distanciaMetros(g.lugar.lat, g.lugar.lon, e.lugar.lat, e.lugar.lon) < 300);
+    if (existente) existente.entradas.push(e);
+    else gruposArr.push({ lugar: e.lugar, entradas: [e] });
   });
-  const lista = Object.values(grupos).filter(g => !g.entradas.every(e => e.origenAuto === "vuelo"));
+  const lista = gruposArr.filter(g => !g.entradas.every(esEntradaVuelo));
 
   useEffect(() => {
     let vivo = true;
@@ -856,7 +872,7 @@ function MapaRecuerdos({ viaje, entradas, media, lugarSel, setLugarSel, onBorrar
       if (capaRef.current) capaRef.current.remove();
       const capa = L.layerGroup().addTo(map); capaRef.current = capa;
       lista.forEach((g, gi) => {
-        const esHotel = g.entradas.some(e => e.origenAuto === "hotel");
+        const esHotel = g.entradas.some(esEntradaHotel);
         const nMedia = g.entradas.reduce((s2, e) => s2 + (e.mediaIds || []).length, 0);
         const contenido = esHotel ? "H" : (nMedia || "✎");
         const m = L.marker([g.lugar.lat, g.lugar.lon], {
