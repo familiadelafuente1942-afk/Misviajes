@@ -405,7 +405,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.88 · 26 jul 2026";
+const APP_VER = "v10.89 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -2691,7 +2691,10 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
   const [costoAbierto, setCostoAbierto] = useState(false);
   // Lo mismo para "Ya en destino" — el hotel, los lugares cercanos y las
   // sugerencias no se pierden si cambiás de pestaña y volvés.
-  const [hotelDestino, setHotelDestino] = useState(null);
+  const [hotelDestino, setHotelDestinoLocal] = useState(viaje.hotelDestino || null);
+  // El hotel ahora se guarda DE VERDAD en el viaje (no solo en la memoria
+  // de esta pantalla) — así sobrevive salir del viaje y volver a entrar.
+  const setHotelDestino = (h) => { setHotelDestinoLocal(h); actualizar({ ...viaje, hotelDestino: h }); };
   const [poiDestino, setPoiDestino] = useState([]);
   const [rutaHotelDestino, setRutaHotelDestino] = useState(null);
   const [sugerenciasDestino, setSugerenciasDestino] = useState([]);
