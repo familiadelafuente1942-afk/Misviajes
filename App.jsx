@@ -414,7 +414,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.99 · 26 jul 2026";
+const APP_VER = "v10.100 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -2476,9 +2476,13 @@ function PlannerIA({ viaje, actualizar, perfil, cfg, onManual, destino, setDesti
       let origenPunto = null;
       try { const geo = await geocodificar(desde); if (geo?.[0]) origenPunto = { nombre: geo[0].nombre, lat: geo[0].lat, lon: geo[0].lon }; } catch { }
       const psConOrigen = origenPunto && !ps.some(p => p.nombre.split(",")[0].toLowerCase() === origenPunto.nombre.split(",")[0].toLowerCase()) ? [origenPunto, ...ps] : ps;
+      // Si la IA devuelve un nombre raro o demasiado corto para ser un
+      // nombre de viaje de verdad, mejor usar el destino tal cual — más
+      // seguro que arriesgarse a algo mal armado o cortado.
+      const nombreValido = plan.nombre_viaje && plan.nombre_viaje.trim().length >= 6 ? plan.nombre_viaje.trim() : destino;
       actualizar({
         ...viaje,
-        nombre: plan.nombre_viaje || viaje.nombre,
+        nombre: nombreValido,
         puntos: psConOrigen,
         itinerario: plan.paradas.map(p => ({ nombre: p.nombre, noches: p.noches, por_que: p.por_que })),
         atraccionPrincipal: plan.atraccion_principal || "",
@@ -3131,8 +3135,9 @@ function ChatIdeas({ cfg, viajes, onCrearViaje }) {
       let origenPunto = null;
       try { const geo = await geocodificar(desde); if (geo?.[0]) origenPunto = { nombre: geo[0].nombre, lat: geo[0].lat, lon: geo[0].lon }; } catch { }
       const psConOrigen = origenPunto && !ps.some(p => p.nombre.split(",")[0].toLowerCase() === origenPunto.nombre.split(",")[0].toLowerCase()) ? [origenPunto, ...ps] : ps;
+      const nombreValido = plan.nombre_viaje && plan.nombre_viaje.trim().length >= 6 ? plan.nombre_viaje.trim() : destino;
       const v = {
-        id: uid(), nombre: plan.nombre_viaje || destino, creado: Date.now(), modoViaje: "auto",
+        id: uid(), nombre: nombreValido, creado: Date.now(), modoViaje: "auto",
         puntos: psConOrigen, sugerencias: [], bitacora: [], fechaInicio: "", diasVacaciones: String(dias),
         itinerario: plan.paradas.map(p => ({ nombre: p.nombre, noches: p.noches, por_que: p.por_que })),
         atraccionPrincipal: plan.atraccion_principal || "",
@@ -3490,6 +3495,15 @@ function MisViajesApp({ onSalir }) {
   useEffect(() => {
     const vacios = (data.viajes || []).filter(esViajeVacio);
     if (vacios.length) guardar({ ...data, viajes: data.viajes.filter(v2 => !esViajeVacio(v2)) });
+  }, []);
+  // Sanar viajes que se quedaron con el nombre genérico "Nuevo viaje" aunque
+  // ya tengan destino cargado (por ejemplo, cargaste el vuelo antes de que
+  // existiera este arreglo) — se corrige solo, sin que haga falta re-guardar nada.
+  useEffect(() => {
+    const conNombreViejo = (data.viajes || []).filter(v2 => (!v2.nombre || v2.nombre === "Nuevo viaje") && (v2.puntos || []).length > 0);
+    if (conNombreViejo.length) {
+      guardar({ ...data, viajes: data.viajes.map(v2 => conNombreViejo.includes(v2) ? { ...v2, nombre: v2.puntos[v2.puntos.length - 1].nombre.split(",")[0] } : v2) });
+    }
   }, []);
   // El ícono muestra los días que faltan para el próximo viaje (hasta 60 días antes).
   useEffect(() => {
