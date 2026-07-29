@@ -405,7 +405,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.84 · 26 jul 2026";
+const APP_VER = "v10.85 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1557,7 +1557,7 @@ function ReservasGuardadas({ viaje, actualizar, media }) {
     <input ref={fileRef} type="file" accept="image/*,application/pdf" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) procesarArchivo(f); }} style={{ display: "none" }} />
     {!form && <div style={{ textAlign: "center", marginTop: reservas.length ? 8 : 4 }}><button onClick={() => setForm(baseForm(null))} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.sub, fontSize: 11.5, fontWeight: 700, cursor: "pointer", padding: "9px 14px", borderRadius: 9 }}>✏️ Cargar a mano, sin adjuntar nada</button></div>}
 
-    {reservas.length === 0 && !form && <div style={{ fontSize: 11.5, color: T.sub, lineHeight: 1.5, marginTop: 4 }}>Cada vez que reserven algo — hotel en Booking, auto, una excursión — cargá el voucher acá. Queda todo junto, a mano, con o sin señal.</div>}
+    {reservas.length === 0 && !form && <div style={{ fontSize: 12.5, color: T.text, fontWeight: 700, lineHeight: 1.5, marginTop: 4 }}>Cada vez que reserven algo — hotel en Booking, auto, una excursión — cargá el voucher acá. Queda todo junto, a mano, con o sin señal.</div>}
 
     {reservas.map(r => { const [ic, etiqueta] = TIPOS_RESERVA[r.tipo] || TIPOS_RESERVA.otro; return (<div key={r.id} style={{ background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 7 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
