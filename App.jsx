@@ -405,7 +405,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.89 · 26 jul 2026";
+const APP_VER = "v10.90 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -2694,7 +2694,24 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
   const [hotelDestino, setHotelDestinoLocal] = useState(viaje.hotelDestino || null);
   // El hotel ahora se guarda DE VERDAD en el viaje (no solo en la memoria
   // de esta pantalla) — así sobrevive salir del viaje y volver a entrar.
-  const setHotelDestino = (h) => { setHotelDestinoLocal(h); actualizar({ ...viaje, hotelDestino: h }); };
+  // Y además queda anotado en el itinerario: "llegamos al aeropuerto" (si
+  // ya lo marcaste) y ahora "llegamos al hotel", en orden, una detrás de
+  // la otra — no solo la línea en el mapa chico de "Ya en destino".
+  const setHotelDestino = (h) => {
+    setHotelDestinoLocal(h);
+    let bitacoraNueva = viaje.bitacora || [];
+    if (h) {
+      const yaExiste = bitacoraNueva.some(e => e.lugar?.nombre?.split(",")[0]?.toLowerCase() === h.nombre.split(",")[0].toLowerCase());
+      if (!yaExiste) {
+        bitacoraNueva = [...bitacoraNueva, {
+          id: uid(), fecha: hoyISO(), ts: Date.now(),
+          texto: `Llegamos al hotel — ${h.nombre.split(",")[0]}.`,
+          lugar: { nombre: h.nombre, lat: h.lat, lon: h.lon },
+        }];
+      }
+    }
+    actualizar({ ...viaje, hotelDestino: h, bitacora: bitacoraNueva });
+  };
   const [poiDestino, setPoiDestino] = useState([]);
   const [rutaHotelDestino, setRutaHotelDestino] = useState(null);
   const [sugerenciasDestino, setSugerenciasDestino] = useState([]);
