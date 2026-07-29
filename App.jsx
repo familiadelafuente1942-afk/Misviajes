@@ -474,7 +474,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.109 · 26 jul 2026";
+const APP_VER = "v10.110 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -2059,13 +2059,21 @@ function EnDestino({ lugar, viaje, perfil, hotel, setHotel, poi, setPoi, rutaHot
       {[["Kayak Autos", "#FF690F", `https://www.kayak.com.ar/cars/${encodeURIComponent(lugar)}${viaje.fechaInicio ? `/${viaje.fechaInicio}/${viaje.fechaVuelta || viaje.fechaInicio}` : ""}`],
         ["Despegar Autos", "#4A148C", "https://www.despegar.com.ar/autos/"]]
         .map(([nom, color, url]) => <button key={nom} onClick={() => abrir(url)} style={{ background: color, border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{nom}</button>)}
+      <button onClick={() => abrir(`https://www.google.com/search?q=${encodeURIComponent("alquiler de autos en " + lugar)}`)} style={{ background: "#4285F4", border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>Google</button>
     </div>
 
     <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>🗺 Explorar cerca de acá{buscandoCoords ? " (ubicando…)" : ""}</div>
     <div style={{ fontSize: 10.5, color: T.muted, marginBottom: 7 }}>Toca una categoría — los resultados aparecen directo abajo, en el mapa.</div>
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: hotel ? 10 : 13 }}>
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
       {["Restaurantes", "Qué visitar", "Souvenirs y regalos", "Supermercado"]
         .map(nom => <button key={nom} onClick={() => buscarCategoria(nom)} disabled={buscandoCategoria === nom} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", opacity: buscandoCategoria === nom ? 0.6 : 1 }}>{buscandoCategoria === nom ? "Buscando…" : nom}</button>)}
+    </div>
+    {/* Lo mismo, pero en Google Maps: por si el mapa de acá no trae lo que
+        buscabas, o simplemente querés ver reseñas, fotos y horarios. */}
+    <div style={{ fontSize: 10, color: T.muted, marginBottom: 5 }}>O buscarlo en Google Maps (reseñas, fotos, horarios):</div>
+    <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: hotel ? 10 : 13 }}>
+      {["Restaurantes", "Qué visitar", "Souvenirs y regalos", "Supermercado"]
+        .map(nom => <button key={nom} onClick={() => abrirCerca(nom === "Qué visitar" ? "lugares turísticos" : nom.toLowerCase())} style={{ background: "none", border: `1px solid ${T.border}`, color: T.sub, borderRadius: 8, padding: "7px 10px", fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>{nom}</button>)}
     </div>
 
     {coordsActivos && <>
@@ -2081,6 +2089,7 @@ function EnDestino({ lugar, viaje, perfil, hotel, setHotel, poi, setPoi, rutaHot
     <button onClick={pedirSugerencias} disabled={buscandoSug} style={{ width: "100%", background: buscandoSug ? T.card2 : T.accent, border: "none", color: buscandoSug ? T.sub : "#1a1205", borderRadius: 9, padding: "12px", fontSize: 12.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
       <Ico n="varita" s={13} /> {buscandoSug ? "Pensando…" : "✨ ¿Qué hacer o alquilar acá?"}
     </button>
+    <button onClick={() => abrir(`https://www.google.com/search?q=${encodeURIComponent("qué hacer en " + lugar + " excursiones y actividades")}`)} style={{ width: "100%", background: "none", border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "10px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", marginTop: 6 }}>O buscar qué hacer en Google</button>
     {sugerencias.length > 0 && <div style={{ marginTop: 9 }}>
       {sugerencias.map(sg => (<div key={sg.id}>
         <div onClick={() => setSugerenciaAbierta(sugerenciaAbierta === sg.id ? null : sg.id)} style={{ display: "flex", alignItems: "center", gap: 9, background: T.card2, border: `1px solid ${T.border}`, borderRadius: 9, padding: "10px 12px", marginBottom: 6, cursor: "pointer" }}>
@@ -3060,6 +3069,7 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
           <button onClick={sugerirConIA} disabled={sugiriendo} style={{ flex: 1, background: sugiriendo ? T.card2 : T.accent, border: "none", color: sugiriendo ? T.sub : "#1a1205", borderRadius: T.rsm, padding: "13px 8px", fontSize: 13, fontWeight: 800, cursor: "pointer" }}><Ico n="estrella" s={15} /> {sugiriendo ? "Buscando joyitas…" : "¿Qué hay lindo para ver?"}</button>
           <button onClick={abrirGoogleMaps} disabled={puntos.length < 2} style={{ flex: 1, background: T.card, border: `1px solid ${T.border}`, color: T.text, borderRadius: T.rsm, padding: "13px 8px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}><Ico n="gmaps" s={15} c={T.accent2} /> Navegar con Maps</button>
         </div>
+        {puntos.length > 0 && <button onClick={() => abrir(`https://www.google.com/search?q=${encodeURIComponent(puntos.length === 1 ? `qué ver en ${puntos[0].nombre.split(",")[0]}` : `qué ver entre ${puntos[0].nombre.split(",")[0]} y ${puntos[puntos.length - 1].nombre.split(",")[0]}`)}`)} style={{ width: "100%", background: "none", border: `1px solid ${T.border}`, color: T.sub, borderRadius: T.rsm, padding: "10px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", marginTop: 8 }}>O buscar qué ver en Google</button>}
         {puntos.length >= 2 && <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", background: T.card, border: `1px solid ${T.border}`, borderRadius: T.rsm, padding: "11px 12px" }}>
           <Ico n="auto" s={18} c={T.text} />
           <div style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: T.sub, lineHeight: 1.45 }}><b style={{ color: T.text }}>Verlo en el auto:</b> mandá el viaje al navegador y enchufá el teléfono — aparece en CarPlay / Android Auto con todas las paradas.</div>
