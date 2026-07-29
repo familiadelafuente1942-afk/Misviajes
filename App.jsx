@@ -365,34 +365,74 @@ function esViajeVacio(v) {
 // usamos para geocodificar. Devuelve el mismo formato que "sugerencias"
 // del mapa de Ruta, así se puede mostrar con el mismo componente Mapa.
 const ETIQUETA_POI = { restaurant: "🍽 Restaurante", cafe: "☕ Café", fast_food: "🍔 Comida rápida", gift: "🎁 Souvenirs y regalos", clothes: "👕 Ropa", sports: "🎿 Deportes / alquiler de equipo", outdoor: "🎒 Equipamiento outdoor", supermarket: "🛒 Supermercado" };
+// El servicio de OpenStreetMap que usamos (Overpass) es gratuito y se
+// sobrecarga bastante seguido — por eso a veces fallaba y no traía nada.
+// Ahora probamos VARIOS servidores en fila hasta que uno conteste, y
+// pedimos también los lugares que están dibujados como edificios (no solo
+// como un punto): así aparecen muchos más que antes.
+const SERVIDORES_OSM = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+];
+async function consultarOverpass(query) {
+  let ultimoError = null;
+  for (const srv of SERVIDORES_OSM) {
+    try {
+      const ctrl = new AbortController();
+      const reloj = setTimeout(() => ctrl.abort(), 20000);
+      const r = await fetch(srv, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "data=" + encodeURIComponent(query),
+        signal: ctrl.signal,
+      });
+      clearTimeout(reloj);
+      if (!r.ok) { ultimoError = new Error(`servidor ocupado (${r.status})`); continue; }
+      const j = await r.json();
+      if (j && Array.isArray(j.elements)) return j;
+      ultimoError = new Error("respuesta inesperada");
+    } catch (e) { ultimoError = e; }
+  }
+  throw ultimoError || new Error("no respondió ningún servidor de mapas");
+}
+// Saca lat/lon tanto de un punto suelto como del centro de un edificio.
+function coordsDeElemento(e) {
+  if (e.lat != null && e.lon != null) return { lat: e.lat, lon: e.lon };
+  if (e.center) return { lat: e.center.lat, lon: e.center.lon };
+  return null;
+}
 async function puntosDeInteresCerca(lat, lon) {
-  const query = `[out:json][timeout:15];(node["amenity"="restaurant"](around:900,${lat},${lon});node["amenity"="cafe"](around:900,${lat},${lon});node["amenity"="fast_food"](around:900,${lat},${lon});node["shop"="gift"](around:900,${lat},${lon});node["shop"="clothes"](around:900,${lat},${lon});node["shop"="sports"](around:900,${lat},${lon});node["shop"="outdoor"](around:900,${lat},${lon});node["shop"="supermarket"](around:900,${lat},${lon}););out body 40;`;
-  const r = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: query });
-  const j = await r.json();
+  const tags = ["amenity=restaurant", "amenity=cafe", "amenity=fast_food", "shop=gift", "shop=clothes", "shop=sports", "shop=outdoor", "shop=supermarket"];
+  const query = `[out:json][timeout:25];(${tags.map(t => { const [k, v] = t.split("="); return `nwr["${k}"="${v}"](around:900,${lat},${lon});`; }).join("")});out center 60;`;
+  const j = await consultarOverpass(query);
   return (j.elements || [])
-    .filter(e => e.tags?.name && e.lat && e.lon)
-    .map(e => ({ id: "poi" + e.id, nombre: e.tags.name, lat: e.lat, lon: e.lon, desc: ETIQUETA_POI[e.tags.amenity || e.tags.shop] || "" }))
+    .map(e => ({ e, c: coordsDeElemento(e) }))
+    .filter(x => x.e.tags?.name && x.c)
+    .map(({ e, c }) => ({ id: "poi" + e.id, nombre: e.tags.name, lat: c.lat, lon: c.lon, desc: ETIQUETA_POI[e.tags.amenity || e.tags.shop] || "" }))
     .slice(0, 35);
 }
 // Búsqueda por UNA categoría puntual — para cuando tocás "Restaurantes" o
 // "Qué visitar" en Explorar cerca. Va directo al mapa de la app, no a
 // Google — así no salís de la app para ver algo que ya podemos mostrar acá.
 const TAGS_CATEGORIA = {
-  "Restaurantes": ['node["amenity"="restaurant"]', 'node["amenity"="cafe"]', 'node["amenity"="fast_food"]'],
-  "Qué visitar": ['node["tourism"="attraction"]', 'node["tourism"="museum"]', 'node["tourism"="viewpoint"]', 'node["tourism"="artwork"]'],
-  "Souvenirs y regalos": ['node["shop"="gift"]', 'node["shop"="souvenir"]'],
-  "Supermercado": ['node["shop"="supermarket"]'],
+  "Restaurantes": ["amenity=restaurant", "amenity=cafe", "amenity=fast_food", "amenity=bar", "amenity=pub", "amenity=ice_cream"],
+  "Qué visitar": ["tourism=attraction", "tourism=museum", "tourism=viewpoint", "tourism=artwork", "tourism=theme_park", "tourism=zoo", "historic=monument", "leisure=park"],
+  "Souvenirs y regalos": ["shop=gift", "shop=souvenir", "shop=art", "shop=craft"],
+  "Supermercado": ["shop=supermarket", "shop=convenience", "shop=greengrocer"],
 };
 async function puntosPorCategoria(lat, lon, categoria) {
   const tags = TAGS_CATEGORIA[categoria] || [];
   if (!tags.length) return [];
-  const query = `[out:json][timeout:15];(${tags.map(t => `${t}(around:1500,${lat},${lon});`).join("")});out body 30;`;
-  const r = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: query });
-  const j = await r.json();
+  // "Qué visitar" busca más lejos: las atracciones suelen estar afuera del centro.
+  const radio = categoria === "Qué visitar" ? 12000 : 2500;
+  const query = `[out:json][timeout:25];(${tags.map(t => { const [k, v] = t.split("="); return `nwr["${k}"="${v}"](around:${radio},${lat},${lon});`; }).join("")});out center 60;`;
+  const j = await consultarOverpass(query);
   return (j.elements || [])
-    .filter(e => e.tags?.name && e.lat && e.lon)
-    .map(e => ({ id: "poi" + e.id, nombre: e.tags.name, lat: e.lat, lon: e.lon, desc: categoria }))
-    .slice(0, 30);
+    .map(e => ({ e, c: coordsDeElemento(e) }))
+    .filter(x => x.e.tags?.name && x.c)
+    .map(({ e, c }) => ({ id: "poi" + e.id, nombre: e.tags.name, lat: c.lat, lon: c.lon, desc: categoria }))
+    .slice(0, 40);
 }
 function codigoAeropuerto(nombre) {
   const limpio = (nombre || "").split(",")[0].trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -434,7 +474,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.108 · 26 jul 2026";
+const APP_VER = "v10.109 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1950,7 +1990,9 @@ function EnDestino({ lugar, viaje, perfil, hotel, setHotel, poi, setPoi, rutaHot
       if (!encontrados.length) { alert(`No encontré ${categoria.toLowerCase()} cargados en el mapa cerca de acá.`); setBuscandoCategoria(null); return; }
       // Sumo lo nuevo al mapa sin duplicar lo que ya estaba (por id).
       setPoi(actual => { const ids = new Set(actual.map(p => p.id)); return [...actual, ...encontrados.filter(e => !ids.has(e.id))]; });
-    } catch { alert("No pude buscar ahora — probá de nuevo."); }
+    } catch {
+      if (confirm(`Los servidores de mapas de OpenStreetMap (que son gratuitos y se saturan seguido) no contestaron. ¿Querés buscar ${categoria.toLowerCase()} en Google Maps en su lugar?`)) abrirCerca(categoria);
+    }
     setBuscandoCategoria(null);
   }
   function abrirUber() {
