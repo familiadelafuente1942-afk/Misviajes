@@ -434,7 +434,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.106 · 26 jul 2026";
+const APP_VER = "v10.108 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1911,6 +1911,10 @@ function EnDestino({ lugar, viaje, perfil, hotel, setHotel, poi, setPoi, rutaHot
   // típicamente "llegamos al aeropuerto" con el botón de GPS. Apenas
   // cargás el hotel, se traza la ruta real desde ahí hasta acá.
   const ultimoLugarBitacora = [...(viaje.bitacora || [])].filter(e => e.lugar?.lat).sort((a, b) => (b.ts || 0) - (a.ts || 0))[0]?.lugar;
+  // Fechas reales del viaje, para que los enlaces de hotel ya vayan con
+  // check-in y check-out puestos y no haya que cargarlos de nuevo.
+  const fechasHotel = viaje.fechaInicio && viaje.fechaVuelta ? { in: viaje.fechaInicio, out: viaje.fechaVuelta }
+    : (viaje.fechaInicio && viaje.diasVacaciones ? { in: viaje.fechaInicio, out: isoMasDiasSimple(viaje.fechaInicio, Number(viaje.diasVacaciones) - 1) } : null);
 
   useEffect(() => {
     if (punto) { setCoords({ lat: punto.lat, lon: punto.lon }); setBuscandoCoords(false); return; }
@@ -1998,6 +2002,14 @@ function EnDestino({ lugar, viaje, perfil, hotel, setHotel, poi, setPoi, rutaHot
     </div> : <div style={{ marginBottom: 13 }}>
       <BuscarLugar placeholder="Nombre o dirección del hotel…" onElegir={(r) => setHotel(r)} />
       <div style={{ fontSize: 10.5, color: T.muted, marginTop: 5 }}>{ultimoLugarBitacora ? `Cargalo y trazamos la ruta desde "${ultimoLugarBitacora.nombre.split(",")[0]}" (lo último que marcaste en la bitácora) hasta acá.` : `Cargalo y el mapa de acá abajo, Uber y "explorar cerca" se centran justo ahí — no en el centro genérico de ${lugar}.`}</div>
+      {/* El campo de arriba es para el hotel que YA tenés. Si todavía no
+          reservaste nada, acá abajo están los buscadores para conseguirlo. */}
+      <div style={{ borderTop: `1px dashed ${T.border}`, marginTop: 11, paddingTop: 10 }}>
+        <div style={{ fontSize: 11.5, fontWeight: 800, color: T.text, marginBottom: 3 }}>¿Todavía no tenés hotel?</div>
+        <div style={{ fontSize: 10.5, color: T.muted, marginBottom: 2 }}>Buscá y reservá en {lugar}, y después cargalo arriba.</div>
+        <HospedajeLinks lugar={lugar} f={fechasHotel} />
+        <button onClick={() => abrir(`https://www.google.com/travel/search?q=${encodeURIComponent("hoteles en " + lugar)}`)} style={{ background: "#4285F4", border: "none", color: "#fff", borderRadius: 9, padding: "9px 11px", fontSize: 11.5, fontWeight: 800, cursor: "pointer", marginTop: 6 }}>Google Hoteles</button>
+      </div>
     </div>}
 
     <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>🚗 Alquilar un auto acá</div>
@@ -2860,12 +2872,21 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
         }
       } catch { }
     }
-    if (puntosUsar.length < 2) { alert("Cargá origen y destino primero."); return; }
+    // Con DOS o más puntos es un recorrido: busca joyitas sobre el camino.
+    // Con UNO solo (por ejemplo, cargaste una reserva y ya sabés que vas a
+    // Bariloche) no hay camino que recorrer: busca alrededor de ese lugar.
+    if (puntosUsar.length === 0) { alert("Primero cargá a dónde vas — o cargá una reserva y lo tomo de ahí."); return; }
+    const soloDestino = puntosUsar.length === 1;
     setSugiriendo(true);
     try {
-      const sys = "Sos un guía de viajes experto en rutas por auto, con conocimiento profundo de Argentina y el mundo. Respondés SOLO con un array JSON válido, sin texto adicional ni markdown.";
+      const sys = soloDestino
+        ? "Sos un guía de viajes experto, con conocimiento profundo de Argentina y el mundo. Respondés SOLO con un array JSON válido, sin texto adicional ni markdown."
+        : "Sos un guía de viajes experto en rutas por auto, con conocimiento profundo de Argentina y el mundo. Respondés SOLO con un array JSON válido, sin texto adicional ni markdown.";
       const resumenUsar = puntosUsar.map((p, i) => `${i === 0 ? "Origen" : i === puntosUsar.length - 1 ? "Destino" : `Parada ${i}`}: ${p.nombre.split(",").slice(0, 2).join(",")}`).join("\n");
-      const prompt = `${perfil ? `Así viajamos nosotros: ${perfil}\n\n` : ""}Estoy planificando este viaje en auto:\n${resumenUsar}\n\nSugerime entre 8 y 12 lugares LINDOS o de interés que estén SOBRE el recorrido o a un desvío corto (máx ~40 km): pueblos con encanto, miradores, parques nacionales, comidas típicas imperdibles, sitios históricos. Evitá los que ya son paradas.\n\nRespondé SOLO este JSON:\n[{"nombre":"...","localidad":"...","provincia_o_region":"...","desc":"por qué vale la pena, 1-2 frases","desvio_km":0,"lat":-00.0000,"lon":-00.0000}]`;
+      const lugarUnico = puntosUsar[0].nombre.split(",").slice(0, 2).join(",");
+      const prompt = soloDestino
+        ? `${perfil ? `Así viajamos nosotros: ${perfil}\n\n` : ""}Estoy en ${lugarUnico}${viaje.fechaInicio ? ` (viaje del ${viaje.fechaInicio}${viaje.fechaVuelta ? ` al ${viaje.fechaVuelta}` : ""})` : ""}.\n\nSugerime entre 8 y 12 lugares LINDOS o de interés para visitar EN ${lugarUnico} o a un viaje corto desde ahí (máx ~80 km): miradores, cerros, lagos, parques nacionales, pueblos cercanos con encanto, comidas típicas imperdibles, sitios históricos.\n\nRespondé SOLO este JSON:\n[{"nombre":"...","localidad":"...","provincia_o_region":"...","desc":"por qué vale la pena, 1-2 frases","desvio_km":0,"lat":-00.0000,"lon":-00.0000}]`
+        : `${perfil ? `Así viajamos nosotros: ${perfil}\n\n` : ""}Estoy planificando este viaje en auto:\n${resumenUsar}\n\nSugerime entre 8 y 12 lugares LINDOS o de interés que estén SOBRE el recorrido o a un desvío corto (máx ~40 km): pueblos con encanto, miradores, parques nacionales, comidas típicas imperdibles, sitios históricos. Evitá los que ya son paradas.\n\nRespondé SOLO este JSON:\n[{"nombre":"...","localidad":"...","provincia_o_region":"...","desc":"por qué vale la pena, 1-2 frases","desvio_km":0,"lat":-00.0000,"lon":-00.0000}]`;
       const resp = await llamarIA([{ role: "user", content: prompt }], sys, 3000);
       const lista = extraerJSON(resp);
       if (!lista || !lista.length) throw new Error("La IA no devolvió sugerencias válidas. Probá de nuevo.");
@@ -2960,7 +2981,7 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
       {tab === "ruta" && (puntos.length > 0 || modoManualInicial) && <>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
-            <div style={{ flex: 1, fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em" }}>{puntos.length === 0 ? "¿De dónde a dónde?" : `Recorrido (${puntos.length} puntos)`}</div>
+            <div style={{ flex: 1, fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em" }}>{puntos.length === 0 ? "¿De dónde a dónde?" : puntos.length === 1 ? "Destino" : `Recorrido (${puntos.length} puntos)`}</div>
             {puntos.length > 0 && !plannerAbierto && <button onClick={() => setPlannerAbierto(true)} style={{ background: "rgba(232,163,61,.12)", border: `1px solid ${T.accent}`, color: T.accent, borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 800, cursor: "pointer", flexShrink: 0 }}><Ico n="varita" s={12} /> Rehacer con IA</button>}
           </div>
           <div style={{ fontSize: 11.5, color: T.sub, lineHeight: 1.5, marginBottom: 10 }}>Tocá cualquier parada para ver hospedaje y turismo de ESE lugar — no solo del destino final.</div>
@@ -3016,7 +3037,7 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
           </div>); }); })()}
         </div>}
         {sugerencias.length > 0 && <div style={{ marginTop: 18 }}>
-          <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 9, display: "flex", alignItems: "center", gap: 6 }}><Ico n="estrella" s={13} /> Joyitas en el camino ({sugerencias.length})</div>
+          <div style={{ fontSize: 11, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 9, display: "flex", alignItems: "center", gap: 6 }}><Ico n="estrella" s={13} /> {puntos.length <= 1 ? `Joyitas cerca (${sugerencias.length})` : `Joyitas en el camino (${sugerencias.length})`}</div>
           {sugerencias.map(sg => (<div key={sg.id} style={{ background: T.card, border: `1px solid ${T.border}`, borderLeft: `3px solid ${T.accent}`, borderRadius: T.rsm, padding: "11px 12px", marginBottom: 7 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
               <div style={{ minWidth: 0, flex: 1 }}>
