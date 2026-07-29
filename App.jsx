@@ -434,7 +434,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.105 · 26 jul 2026";
+const APP_VER = "v10.106 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1600,27 +1600,37 @@ function ReservasGuardadas({ viaje, actualizar, media }) {
     }
     const reserva = { id: uid(), tipo: form.tipo, nombre: form.nombre.trim(), lugar: form.lugar.trim(), fechaDesde: form.fechaDesde, fechaHasta: form.fechaHasta, numeroReserva: form.numeroReserva.trim(), descripcion: form.descripcion.trim(), docId };
 
-    // El comprobante se queda acá, en Reservas — pero si tiene fecha y
-    // lugar, TAMBIÉN queda marcado en el Itinerario, en el día que
-    // corresponde: hospedaje, auto, actividad, lo que sea.
+    // El comprobante se queda acá — pero si tiene lugar, además pasa a ser
+    // un PUNTO del viaje. Así con solo cargar la reserva ya tenés lo mismo
+    // que si lo hubieras planeado: recorrido, mapa, joyitas alrededor.
+    // Y si tiene fecha, queda marcado en el Itinerario ese día.
     let bitacoraNueva = viaje.bitacora || [];
-    if (reserva.fechaDesde && reserva.lugar) {
+    let puntosNuevos = viaje.puntos || [];
+    let nombreViaje = viaje.nombre;
+    if (reserva.lugar) {
       try {
         const geo = await geocodificar(reserva.lugar);
         if (geo?.[0]) {
-          const yaExiste = bitacoraNueva.some(e => e.fecha === reserva.fechaDesde && e.lugar?.nombre?.split(",")[0]?.toLowerCase() === geo[0].nombre.split(",")[0].toLowerCase());
-          if (!yaExiste) {
-            const ETIQUETA_TIPO = { hospedaje: "Llegada al hospedaje", auto: "Retiro del auto", actividad: "Actividad", otro: "Reserva" };
-            bitacoraNueva = [...bitacoraNueva, {
-              id: uid(), fecha: reserva.fechaDesde, ts: new Date(`${reserva.fechaDesde}T12:00:00`).getTime(),
-              texto: `${ETIQUETA_TIPO[reserva.tipo] || "Reserva"} — ${reserva.nombre || reserva.lugar}.`,
-              lugar: { nombre: geo[0].nombre, lat: geo[0].lat, lon: geo[0].lon },
-            }];
+          const nombreCorto = geo[0].nombre.split(",")[0].toLowerCase();
+          if (!puntosNuevos.some(p => p.nombre.split(",")[0].toLowerCase() === nombreCorto)) {
+            puntosNuevos = [...puntosNuevos, { nombre: geo[0].nombre, lat: geo[0].lat, lon: geo[0].lon }];
+          }
+          if (!nombreViaje || nombreViaje === "Nuevo viaje") nombreViaje = geo[0].nombre.split(",")[0];
+          if (reserva.fechaDesde) {
+            const yaExiste = bitacoraNueva.some(e => e.fecha === reserva.fechaDesde && e.lugar?.nombre?.split(",")[0]?.toLowerCase() === nombreCorto);
+            if (!yaExiste) {
+              const ETIQUETA_TIPO = { hospedaje: "Llegada al hospedaje", auto: "Retiro del auto", actividad: "Actividad", otro: "Reserva" };
+              bitacoraNueva = [...bitacoraNueva, {
+                id: uid(), fecha: reserva.fechaDesde, ts: new Date(`${reserva.fechaDesde}T12:00:00`).getTime(),
+                texto: `${ETIQUETA_TIPO[reserva.tipo] || "Reserva"} — ${reserva.nombre || reserva.lugar}.`,
+                lugar: { nombre: geo[0].nombre, lat: geo[0].lat, lon: geo[0].lon },
+              }];
+            }
           }
         }
       } catch { }
     }
-    actualizar({ ...viaje, reservas: [...reservas, reserva], bitacora: bitacoraNueva });
+    actualizar({ ...viaje, nombre: nombreViaje, reservas: [...reservas, reserva], puntos: puntosNuevos, bitacora: bitacoraNueva });
     setForm(null);
   }
   function borrar(id) {
@@ -2909,7 +2919,7 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
   const hayAlgoReservado = (viaje.vuelos || []).length > 0 || (viaje.reservas || []).length > 0;
   const TABS = viaje.vivido
     ? [["bitacora", "Itinerario de viaje", "libro"], ["ruta", "Mapa del viaje", "mapa"], ["lugar", "Del lugar", "nota"], ["clip", "Clip", "peli"]]
-    : [["ruta", "Planeando mi viaje", "mapa"], ["reservas", hayAlgoReservado ? "Ya tenés tu reserva" : "Reservas", "ticket"], ["bitacora", "Itinerario de viaje", "libro"], ["clima", "Clima", "sol"], ["lugar", "Del lugar", "nota"], ["gastos", "Gastos", "plata"], ["valija", "Valija", "valija"], ["clip", "Clip", "peli"]];
+    : [["ruta", hayAlgoReservado ? "Mi viaje" : "Planeando mi viaje", "mapa"], ["bitacora", "Itinerario de viaje", "libro"], ["clima", "Clima", "sol"], ["lugar", "Del lugar", "nota"], ["gastos", "Gastos", "plata"], ["valija", "Valija", "valija"], ["clip", "Clip", "peli"]];
 
   return (<div style={{ minHeight: "100vh", paddingBottom: 90 }}>
     <div style={{ padding: "14px 16px 0", paddingTop: "max(14px, env(safe-area-inset-top))" }}>
@@ -2933,6 +2943,15 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
       {tab === "ruta" && ((puntos.length === 0 && !modoManualInicial) || plannerAbierto) && <PlannerIA viaje={viaje} actualizar={(v2) => { actualizar(v2); setPlannerAbierto(false); }} perfil={perfil} cfg={cfg} onManual={puntos.length === 0 ? () => setModoManualInicial(true) : null}
         destino={borradorDestino} setDestino={setBorradorDestino} desde={borradorDesde} setDesde={setBorradorDesde} fechaIda={borradorFechaIda} setFechaIda={setBorradorFechaIda} fechaVuelta={borradorFechaVuelta} setFechaVuelta={setBorradorFechaVuelta} />}
       {tab === "ruta" && <EstimadorCosto viaje={viaje} perfil={perfil} cfg={cfg} borradorDestino={borradorDestino} borradorDesde={borradorDesde} estimado={costoEstimado} setEstimado={setCostoEstimado} abierto={costoAbierto} setAbierto={setCostoAbierto} />}
+      {/* Reservas vive ACÁ ahora, no en una pestaña aparte: planear y
+          reservar son el mismo momento. Y cargar una reserva le da al
+          viaje el mismo destino que si lo hubieras planeado — con lo cual
+          el recorrido, el mapa y las joyitas de abajo aparecen igual. */}
+      {tab === "ruta" && <ReservasTab viaje={viaje} actualizar={actualizar} media={media} cfg={cfg} perfil={perfil}
+        hotelDestino={hotelDestino} setHotelDestino={setHotelDestino} poiDestino={poiDestino} setPoiDestino={setPoiDestino}
+        rutaHotelDestino={rutaHotelDestino} setRutaHotelDestino={setRutaHotelDestino}
+        sugerenciasDestino={sugerenciasDestino} setSugerenciasDestino={setSugerenciasDestino}
+        sugerenciaAbiertaDestino={sugerenciaAbiertaDestino} setSugerenciaAbiertaDestino={setSugerenciaAbiertaDestino} />}
       {tab === "ruta" && viaje.atraccionPrincipal && <div style={{ background: "linear-gradient(135deg, rgba(232,163,61,.14), rgba(77,163,255,.08))", border: `1px solid ${T.accent}`, borderRadius: T.r, padding: "12px 14px", marginBottom: 14, display: "flex", gap: 10, alignItems: "flex-start" }}>
         <Ico n="estrella" s={17} c={T.accent} />
         <div><div style={{ fontSize: 10.5, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 3 }}>Lo imperdible de este viaje</div>
@@ -3012,11 +3031,6 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
       </>}
 
       {tab === "clima" && <ClimaTab viaje={viaje} onResumen={setClimaResumen} />}
-      {tab === "reservas" && <ReservasTab viaje={viaje} actualizar={actualizar} media={media} cfg={cfg} perfil={perfil}
-        hotelDestino={hotelDestino} setHotelDestino={setHotelDestino} poiDestino={poiDestino} setPoiDestino={setPoiDestino}
-        rutaHotelDestino={rutaHotelDestino} setRutaHotelDestino={setRutaHotelDestino}
-        sugerenciasDestino={sugerenciasDestino} setSugerenciasDestino={setSugerenciasDestino}
-        sugerenciaAbiertaDestino={sugerenciaAbiertaDestino} setSugerenciaAbiertaDestino={setSugerenciaAbiertaDestino} />}
       {tab === "lugar" && <DelLugarTab viaje={viaje} perfil={perfil} actualizar={actualizar} />}
       {tab === "gastos" && <GastosTab viaje={viaje} actualizar={actualizar} />}
       {tab === "valija" && <ValijaTab viaje={viaje} perfil={perfil} climaResumen={climaResumen} actualizar={actualizar} />}
