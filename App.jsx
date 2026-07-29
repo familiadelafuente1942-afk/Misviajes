@@ -286,7 +286,7 @@ async function llamarIAConBusqueda(messages, system, maxTokens = 1200) {
   try { const r = await fetchConLimite("/api/claude", { method: "POST", headers: { "Content-Type": "application/json" }, body }, 45000); j = await r.json(); } catch { j = null; }
   if (!j || j.error) {
     try { const r2 = await fetchConLimite("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body }, 20000); j = await r2.json(); }
-    catch { throw new Error("No pude conectar con la IA (revisá la conexión y probá de nuevo)."); }
+    catch { throw new Error("El servidor no pudo hacer esta búsqueda con IA (las que buscan en internet tardan más y a veces fallan ahí). Si tenés tu propia clave cargada en Ajustes, esto funciona directo sin depender del servidor."); }
   }
   if (j.error) throw new Error(j.error.message || "Error de IA");
   return (j.content || []).map(c => c.text || "").join("\n").trim();
@@ -374,6 +374,26 @@ async function puntosDeInteresCerca(lat, lon) {
     .map(e => ({ id: "poi" + e.id, nombre: e.tags.name, lat: e.lat, lon: e.lon, desc: ETIQUETA_POI[e.tags.amenity || e.tags.shop] || "" }))
     .slice(0, 35);
 }
+// Búsqueda por UNA categoría puntual — para cuando tocás "Restaurantes" o
+// "Qué visitar" en Explorar cerca. Va directo al mapa de la app, no a
+// Google — así no salís de la app para ver algo que ya podemos mostrar acá.
+const TAGS_CATEGORIA = {
+  "Restaurantes": ['node["amenity"="restaurant"]', 'node["amenity"="cafe"]', 'node["amenity"="fast_food"]'],
+  "Qué visitar": ['node["tourism"="attraction"]', 'node["tourism"="museum"]', 'node["tourism"="viewpoint"]', 'node["tourism"="artwork"]'],
+  "Souvenirs y regalos": ['node["shop"="gift"]', 'node["shop"="souvenir"]'],
+  "Supermercado": ['node["shop"="supermarket"]'],
+};
+async function puntosPorCategoria(lat, lon, categoria) {
+  const tags = TAGS_CATEGORIA[categoria] || [];
+  if (!tags.length) return [];
+  const query = `[out:json][timeout:15];(${tags.map(t => `${t}(around:1500,${lat},${lon});`).join("")});out body 30;`;
+  const r = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: query });
+  const j = await r.json();
+  return (j.elements || [])
+    .filter(e => e.tags?.name && e.lat && e.lon)
+    .map(e => ({ id: "poi" + e.id, nombre: e.tags.name, lat: e.lat, lon: e.lon, desc: categoria }))
+    .slice(0, 30);
+}
 function codigoAeropuerto(nombre) {
   const limpio = (nombre || "").split(",")[0].trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   return CODIGOS_AEROPUERTO[limpio] || null;
@@ -414,7 +434,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.101 · 26 jul 2026";
+const APP_VER = "v10.103 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1874,6 +1894,7 @@ function EnDestino({ lugar, viaje, perfil, hotel, setHotel, poi, setPoi, rutaHot
   const [buscandoSug, setBuscandoSug] = useState(false);
   const [buscandoPoi, setBuscandoPoi] = useState(false);
   const [errorPoi, setErrorPoi] = useState("");
+  const [buscandoCategoria, setBuscandoCategoria] = useState(null);
   const coordsActivos = hotel || coords;
 
   // El último lugar marcado en la bitácora de este viaje CON ubicación —
@@ -1906,6 +1927,17 @@ function EnDestino({ lugar, viaje, perfil, hotel, setHotel, poi, setPoi, rutaHot
   function abrirCerca(categoria) {
     if (!coordsActivos) { abrir(`https://www.google.com/maps/search/${encodeURIComponent(categoria + " en " + lugar)}`); return; }
     abrir(`https://www.google.com/maps/search/${encodeURIComponent(categoria)}/@${coordsActivos.lat},${coordsActivos.lon},15z`);
+  }
+  async function buscarCategoria(categoria) {
+    if (!coordsActivos) { alert("Todavía estoy ubicando el lugar — probá de nuevo en un segundo."); return; }
+    setBuscandoCategoria(categoria);
+    try {
+      const encontrados = await puntosPorCategoria(coordsActivos.lat, coordsActivos.lon, categoria);
+      if (!encontrados.length) { alert(`No encontré ${categoria.toLowerCase()} cargados en el mapa cerca de acá.`); setBuscandoCategoria(null); return; }
+      // Sumo lo nuevo al mapa sin duplicar lo que ya estaba (por id).
+      setPoi(actual => { const ids = new Set(actual.map(p => p.id)); return [...actual, ...encontrados.filter(e => !ids.has(e.id))]; });
+    } catch { alert("No pude buscar ahora — probá de nuevo."); }
+    setBuscandoCategoria(null);
   }
   function abrirUber() {
     if (!coordsActivos) { abrir(`https://www.google.com/search?q=${encodeURIComponent("Uber en " + lugar)}`); return; }
@@ -1966,19 +1998,20 @@ function EnDestino({ lugar, viaje, perfil, hotel, setHotel, poi, setPoi, rutaHot
     </div>
 
     <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>🗺 Explorar cerca de acá{buscandoCoords ? " (ubicando…)" : ""}</div>
+    <div style={{ fontSize: 10.5, color: T.muted, marginBottom: 7 }}>Toca una categoría — los resultados aparecen directo abajo, en el mapa.</div>
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: hotel ? 10 : 13 }}>
-      {[["Restaurantes", "restaurantes"], ["Qué visitar", "lugares turísticos"], ["Souvenirs y regalos", "souvenirs"], ["Supermercado", "supermercado"]]
-        .map(([nom, cat]) => <button key={nom} onClick={() => abrirCerca(cat)} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{nom}</button>)}
+      {["Restaurantes", "Qué visitar", "Souvenirs y regalos", "Supermercado"]
+        .map(nom => <button key={nom} onClick={() => buscarCategoria(nom)} disabled={buscandoCategoria === nom} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", opacity: buscandoCategoria === nom ? 0.6 : 1 }}>{buscandoCategoria === nom ? "Buscando…" : nom}</button>)}
     </div>
 
-    {hotel && <>
+    {coordsActivos && <>
       {buscandoPoi && <div style={{ fontSize: 11.5, color: T.accent, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}><Ico n="varita" s={12} /> Buscando restaurantes, tiendas y equipamiento cerca del hotel…</div>}
       {errorPoi && <div style={{ fontSize: 11.5, color: T.sub, marginBottom: 10 }}>{errorPoi}</div>}
       {!buscandoPoi && (poi.length > 0 || rutaHotel) && <>
-        <Mapa puntos={[{ nombre: hotel.nombre, lat: hotel.lat, lon: hotel.lon }]} linea={rutaHotel} sugerencias={[...poi, ...sugerenciasConMapa]} onAgregarSug={() => { }} alto={280} />
-        <div style={{ fontSize: 10.5, color: T.muted, margin: "8px 0 13px" }}>{poi.length > 0 ? `${poi.length} lugares marcados alrededor del hotel — tocá cada ⭐ para ver qué es.` : ""}{rutaHotel ? `${poi.length > 0 ? " · " : ""}ruta trazada desde donde marcaste último en la bitácora.` : ""}</div>
+        <Mapa puntos={[{ nombre: hotel ? hotel.nombre : lugar, lat: coordsActivos.lat, lon: coordsActivos.lon }]} linea={rutaHotel} sugerencias={[...poi, ...sugerenciasConMapa]} onAgregarSug={() => { }} alto={280} />
+        <div style={{ fontSize: 10.5, color: T.muted, margin: "8px 0 13px" }}>{poi.length > 0 ? `${poi.length} lugares marcados${hotel ? " alrededor del hotel" : ""} — tocá cada ⭐ para ver qué es.` : ""}{rutaHotel ? `${poi.length > 0 ? " · " : ""}ruta trazada desde donde marcaste último en la bitácora.` : ""}</div>
       </>}
-      {!buscandoPoi && !errorPoi && poi.length === 0 && !rutaHotel && <div style={{ fontSize: 11.5, color: T.sub, marginBottom: 13 }}>No encontré lugares cargados en el mapa para esta zona puntual — probá los botones de arriba.</div>}
+      {!buscandoPoi && !errorPoi && poi.length === 0 && !rutaHotel && hotel && <div style={{ fontSize: 11.5, color: T.sub, marginBottom: 13 }}>No encontré lugares cargados en el mapa para esta zona puntual — probá los botones de arriba.</div>}
     </>}
 
     <button onClick={pedirSugerencias} disabled={buscandoSug} style={{ width: "100%", background: buscandoSug ? T.card2 : T.accent, border: "none", color: buscandoSug ? T.sub : "#1a1205", borderRadius: 9, padding: "12px", fontSize: 12.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
