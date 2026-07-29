@@ -474,7 +474,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.110 · 26 jul 2026";
+const APP_VER = "v10.112 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -2462,6 +2462,32 @@ function fechasParada(viaje) {
   }
   return out;
 }
+/* El copiloto no puede "abrir" Google Maps por su cuenta, pero SÍ puede
+   marcar los lugares que nombra. La app los detecta y los convierte en
+   botones de verdad: cómo llegar desde el hotel, o verlo en el mapa. */
+function TextoConLugares({ texto, origen, onSumarAlMapa }) {
+  const lugares = [];
+  const limpio = String(texto || "").replace(/\[\[LUGAR:([^\]|]+)(?:\|([^\]]*))?\]\]/g, (_, nom, ciu) => {
+    const n = nom.trim(), c = (ciu || "").trim();
+    if (n && !lugares.some(l => l.nombre.toLowerCase() === n.toLowerCase())) lugares.push({ nombre: n, ciudad: c });
+    return n;
+  });
+  const comoLlegar = (l) => {
+    const destino = encodeURIComponent(`${l.nombre}${l.ciudad ? ", " + l.ciudad : ""}`);
+    const desde = origen ? (origen.lat != null ? `${origen.lat},${origen.lon}` : encodeURIComponent(origen.nombre || "")) : "";
+    abrir(`https://www.google.com/maps/dir/?api=1${desde ? `&origin=${desde}` : ""}&destination=${destino}&travelmode=driving`);
+  };
+  return (<>
+    <div style={{ whiteSpace: "pre-wrap" }}>{limpio}</div>
+    {lugares.length > 0 && <div style={{ marginTop: 9, paddingTop: 9, borderTop: `1px solid ${T.border}` }}>
+      <div style={{ fontSize: 10, color: T.muted, marginBottom: 5 }}>{origen ? `Cómo llegar desde ${(origen.nombre || "acá").split(",")[0]}:` : "Ver en el mapa:"}</div>
+      {lugares.map((l, i) => (<div key={i} style={{ display: "flex", gap: 5, marginBottom: 5 }}>
+        <button onClick={() => comoLlegar(l)} style={{ flex: 1, textAlign: "left", background: T.card2, border: `1px solid ${T.accent}`, color: T.text, borderRadius: 8, padding: "8px 10px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>📍 {l.nombre}</button>
+        {onSumarAlMapa && <button onClick={() => onSumarAlMapa(l)} title="Sumarlo al mapa del viaje" style={{ background: "none", border: `1px solid ${T.border}`, color: T.sub, borderRadius: 8, padding: "8px 9px", fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>＋ mapa</button>}
+      </div>))}
+    </div>}
+  </>);
+}
 function HospedajeLinks({ lugar, f }) {
   const q = encodeURIComponent(lugar);
   const fechasB = f ? `&checkin=${f.in}&checkout=${f.out}` : "";
@@ -2954,13 +2980,43 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
     actualizar({ ...viaje, puntos: ps, sugerencias: sugerencias.filter(x => x.id !== sg.id) });
   }
 
+  // Desde dónde se calculan los "cómo llegar" que ofrece el copiloto: el
+  // hotel si está cargado, si no lo último que marcaste en el itinerario.
+  const ultimoLugarChat = [...(viaje.bitacora || [])].filter(e => e.lugar?.lat).sort((a, b) => (b.ts || 0) - (a.ts || 0))[0]?.lugar
+    || (puntos.length ? puntos[puntos.length - 1] : null);
+  // Un lugar que nombró el copiloto se puede sumar al mapa del viaje.
+  async function sumarLugarDelChat(l) {
+    try {
+      const geo = await geocodificar(`${l.nombre}${l.ciudad ? ", " + l.ciudad : ""}`);
+      if (!geo?.[0]) { alert(`No pude ubicar "${l.nombre}" en el mapa. Probá con "📍" para verlo en Google Maps.`); return; }
+      const nombreCorto = geo[0].nombre.split(",")[0].toLowerCase();
+      if ((viaje.sugerencias || []).some(s => s.nombre.toLowerCase() === l.nombre.toLowerCase())) { alert("Ya está en el mapa."); return; }
+      actualizar({ ...viaje, sugerencias: [...(viaje.sugerencias || []), { id: uid(), nombre: l.nombre, localidad: l.ciudad || geo[0].nombre.split(",")[1]?.trim() || "", desc: "Sugerido por el copiloto.", lat: geo[0].lat, lon: geo[0].lon }] });
+      alert(`"${l.nombre}" quedó marcado en el mapa del viaje.`);
+    } catch { alert("No pude sumarlo ahora — probá de nuevo."); }
+  }
   async function enviarChat() {
     const t = chatInputRef.current.trim(); if (!t || chatBusy) return;
     setChatInput("");
     const msgs = [...chatMsgs, { role: "user", content: t }];
     setChatMsgs(msgs); setChatBusy(true);
     try {
-      const sys = `Sos el copiloto de viaje de la app Mis Viajes. Conocés rutas, pueblos, comida y lugares de Argentina y el mundo. Contestás en voseo, cálido y concreto, como un amigo que ya hizo ese viaje.${perfil ? ` Así viaja esta gente (tenelo SIEMPRE en cuenta): ${perfil}.` : ""} Viaje actual:\n${resumenPuntos()}${ruta ? `\nDistancia: ${kmFmt(ruta.dist)} — Manejo: ${hFmt(ruta.dur)}` : ""}${viaje.fechaInicio ? `\nSalida: ${viaje.fechaInicio} · ${viaje.diasVacaciones || "?"} días de vacaciones` : ""}${climaResumen ? `\nPronóstico por punto del recorrido (días con alertas):\n${climaResumen}\nSi te preguntan si conviene postergar o correr la salida, usá estos datos y sé concreto.` : ""}${(viaje.gastos || []).length ? `\nGastos: llevan gastado ${(viaje.gastos || []).reduce((s2, g) => s2 + (Number(g.monto) || 0), 0)} ${viaje.moneda || "ARS"}${viaje.presupuesto ? ` de un presupuesto de ${viaje.presupuesto}` : ""}.` : ""}`;
+      // Todo lo que la app YA sabe del viaje va al copiloto: el hotel
+      // cargado, los vuelos, las reservas y el último lugar marcado. Si no,
+      // te pregunta cosas que ya tenés puestas ("¿en qué hotel estás?").
+      const hotelCtx = viaje.hotelDestino ? `\nHOTEL DONDE SE ALOJAN (ya cargado, NO lo preguntes): ${viaje.hotelDestino.nombre} — coordenadas ${viaje.hotelDestino.lat}, ${viaje.hotelDestino.lon}. Cuando pregunten "cerca de mi hotel", "desde acá" o similar, es DESDE ESTE PUNTO.` : "";
+      const vuelosCtx = (viaje.vuelos || []).length ? `\nVUELOS CARGADOS: ${(viaje.vuelos || []).map(v2 => `${v2.aerolinea || ""} ${v2.numero || ""} ${v2.origen || ""}→${v2.destino || ""}${v2.fecha ? ` el ${v2.fecha}` : ""}${v2.horaLlegada ? `, llega ${v2.horaLlegada}hs` : ""}`.trim()).join(" · ")}` : "";
+      const reservasCtx = (viaje.reservas || []).length ? `\nRESERVAS YA HECHAS: ${(viaje.reservas || []).map(r => `${r.tipo}: ${r.nombre}${r.lugar ? ` en ${r.lugar}` : ""}${r.fechaDesde ? ` (${r.fechaDesde}${r.fechaHasta ? " al " + r.fechaHasta : ""})` : ""}`).join(" · ")}` : "";
+      const ultimoLugar = [...(viaje.bitacora || [])].filter(e => e.lugar?.lat).sort((a, b) => (b.ts || 0) - (a.ts || 0))[0]?.lugar;
+      const dondeCtx = ultimoLugar ? `\nÚLTIMO LUGAR MARCADO EN EL ITINERARIO: ${ultimoLugar.nombre} (${ultimoLugar.lat}, ${ultimoLugar.lon}) — es lo más cerca que sabemos de dónde están ahora.` : "";
+      const sys = `Sos el copiloto de viaje de la app Mis Viajes. Conocés rutas, pueblos, comida y lugares de Argentina y el mundo. Contestás en voseo, cálido y concreto, como un amigo que ya hizo ese viaje.${perfil ? ` Así viaja esta gente (tenelo SIEMPRE en cuenta): ${perfil}.` : ""}
+
+IMPORTANTE 1 — LO QUE YA SABÉS: todo lo que figura abajo ya está cargado en la app. NUNCA preguntes un dato que ya tenés acá (el hotel, el destino, las fechas, los vuelos). Usalo directamente y respondé. Si te falta algo que NO está acá, ahí sí preguntalo.
+
+IMPORTANTE 2 — SÍ PODÉS DAR UBICACIONES: cada vez que nombres un lugar concreto (un restaurante, un cerro, un museo, una excursión), escribilo así: [[LUGAR:Nombre exacto|Ciudad]]. La app lo convierte automáticamente en un botón tocable que abre el mapa con la ruta desde donde están. Ejemplo: "Te recomiendo [[LUGAR:Alto El Fuego|Bariloche]], a 5 cuadras". NUNCA digas que no podés dar ubicaciones ni mandar mapas — sí podés, con esa marca. No pongas links de Google Maps a mano: usá SOLO la marca.
+
+Viaje actual:
+${resumenPuntos()}${hotelCtx}${vuelosCtx}${reservasCtx}${dondeCtx}${ruta ? `\nDistancia: ${kmFmt(ruta.dist)} — Manejo: ${hFmt(ruta.dur)}` : ""}${viaje.fechaInicio ? `\nSalida: ${viaje.fechaInicio}${viaje.fechaVuelta ? ` · Vuelta: ${viaje.fechaVuelta}` : ""} · ${viaje.diasVacaciones || "?"} días de vacaciones` : ""}${climaResumen ? `\nPronóstico por punto del recorrido (días con alertas):\n${climaResumen}\nSi te preguntan si conviene postergar o correr la salida, usá estos datos y sé concreto.` : ""}${(viaje.gastos || []).length ? `\nGastos: llevan gastado ${(viaje.gastos || []).reduce((s2, g) => s2 + (Number(g.monto) || 0), 0)} ${viaje.moneda || "ARS"}${viaje.presupuesto ? ` de un presupuesto de ${viaje.presupuesto}` : ""}.` : ""}`;
       const resp = await llamarIA(msgs.slice(-12), sys, 1500);
       setChatMsgs(prev => [...prev, { role: "assistant", content: resp }]);
       if (porVozRefC.current) { porVozRefC.current = false; hablarTexto(resp); }
@@ -3128,7 +3184,10 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
       <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
         {chatMsgs.length === 0 && <div style={{ color: T.muted, fontSize: 13, lineHeight: 1.7, padding: "20px 6px" }}>Preguntas que le podés hacer:<br />· "¿Hay una ruta alternativa más linda aunque sea más larga?"<br />· "¿Dónde conviene parar a dormir a mitad de camino?"<br />· "¿Qué comida típica no me puedo perder?"</div>}
         {chatMsgs.map((m, i) => (<div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
-          <div style={{ maxWidth: "85%", background: m.role === "user" ? T.accent : T.card, color: m.role === "user" ? "#1a1205" : T.text, borderRadius: 14, padding: "11px 14px", fontSize: 13.5, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{m.content}</div>
+          <div style={{ maxWidth: "85%", background: m.role === "user" ? T.accent : T.card, color: m.role === "user" ? "#1a1205" : T.text, borderRadius: 14, padding: "11px 14px", fontSize: 13.5, lineHeight: 1.55 }}>
+            {m.role === "user" ? <div style={{ whiteSpace: "pre-wrap" }}>{m.content}</div>
+              : <TextoConLugares texto={m.content} origen={viaje.hotelDestino || ultimoLugarChat} onSumarAlMapa={sumarLugarDelChat} />}
+          </div>
         </div>))}
         {chatBusy && <div style={{ color: T.sub, fontSize: 12.5 }}>Pensando…</div>}
         <div ref={chatEndRef} />
