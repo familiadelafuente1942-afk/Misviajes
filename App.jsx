@@ -474,7 +474,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.116 · 26 jul 2026";
+const APP_VER = "v10.117 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -3294,17 +3294,18 @@ function CardViaje({ v, onAbrir, onBorrar }) {
   }, [fotos.length, v.puntos?.length, v.nombre]);
   const nEnt = (v.bitacora || []).length;
   const hayFondo = fotos.length > 0 || !!fotoLugar;
-  return (<div onClick={onAbrir} style={{ position: "relative", borderRadius: T.r, overflow: "hidden", border: `1px solid ${T.border}`, marginBottom: 11, cursor: "pointer", minHeight: hayFondo ? 150 : 76, background: T.card }}>
+  return (<div onClick={onAbrir} style={{ position: "relative", borderRadius: T.r, overflow: "hidden", border: `1px solid ${T.border}`, cursor: "pointer", aspectRatio: "1", background: T.card }}>
     {fotos.length > 0
       ? fotos.map((u, i) => <div key={i} style={{ position: "absolute", inset: 0, backgroundImage: `url(${u})`, backgroundSize: "cover", backgroundPosition: "center", opacity: i === idx ? 1 : 0, transition: "opacity 1.4s ease" }} />)
       : fotoLugar && <div style={{ position: "absolute", inset: 0, backgroundImage: `url(${fotoLugar})`, backgroundSize: "cover", backgroundPosition: "center" }} />}
     {hayFondo && <div style={{ position: "absolute", inset: 0, background: "linear-gradient(rgba(14,17,22,.1) 30%, rgba(14,17,22,.85))" }} />}
-    <div style={{ position: "relative", padding: "15px 16px", display: "flex", alignItems: "flex-end", minHeight: hayFondo ? 150 : 76, boxSizing: "border-box" }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 16, fontWeight: 800, color: hayFondo ? "#fff" : T.text, textShadow: hayFondo ? "0 1px 6px rgba(0,0,0,.6)" : "none" }}>{v.nombre}</div>
-        <div style={{ fontSize: 11.5, color: hayFondo ? "rgba(255,255,255,.85)" : T.sub, marginTop: 2, textShadow: hayFondo ? "0 1px 4px rgba(0,0,0,.6)" : "none" }}>{v.vivido ? "Viaje vivido" : (o && d ? `${o} → ${d}` : o ? `Desde ${o}` : "Sin recorrido aún")}{v.fechaInicio ? ` · ${v.vivido ? fFecha(v.fechaInicio) : "sale " + fFecha(v.fechaInicio)}` : ""}{nEnt ? ` · ${nEnt} recuerdo${nEnt > 1 ? "s" : ""}` : ""}</div>
+    <div style={{ position: "absolute", inset: 0, padding: "12px 13px", display: "flex", flexDirection: "column", justifyContent: "space-between", boxSizing: "border-box" }}>
+      <button onClick={(e) => { e.stopPropagation(); onBorrar(); }} style={{ alignSelf: "flex-end", background: hayFondo ? "rgba(0,0,0,.35)" : "none", border: "none", color: hayFondo ? "rgba(255,255,255,.8)" : T.muted, borderRadius: 8, cursor: "pointer", padding: "6px 7px" }}><Ico n="tacho" s={13} /></button>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: hayFondo ? "#fff" : T.text, textShadow: hayFondo ? "0 1px 6px rgba(0,0,0,.6)" : "none", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{v.nombre}</div>
+        <div style={{ fontSize: 10.5, color: hayFondo ? "rgba(255,255,255,.85)" : T.sub, marginTop: 3, textShadow: hayFondo ? "0 1px 4px rgba(0,0,0,.6)" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.vivido ? "Viaje vivido" : (o && d ? `${o} → ${d}` : o ? `Desde ${o}` : "Sin recorrido aún")}</div>
+        {(v.fechaInicio || nEnt > 0) && <div style={{ fontSize: 10, color: hayFondo ? "rgba(255,255,255,.7)" : T.muted, marginTop: 1, textShadow: hayFondo ? "0 1px 4px rgba(0,0,0,.6)" : "none" }}>{v.fechaInicio ? (v.vivido ? fFecha(v.fechaInicio) : "sale " + fFecha(v.fechaInicio)) : ""}{v.fechaInicio && nEnt ? " · " : ""}{nEnt ? `${nEnt} recuerdo${nEnt > 1 ? "s" : ""}` : ""}</div>}
       </div>
-      <button onClick={(e) => { e.stopPropagation(); onBorrar(); }} style={{ background: hayFondo ? "rgba(0,0,0,.35)" : "none", border: "none", color: hayFondo ? "rgba(255,255,255,.8)" : T.muted, borderRadius: 9, cursor: "pointer", padding: "7px 8px" }}><Ico n="tacho" s={15} /></button>
     </div>
   </div>);
 }
@@ -3811,7 +3812,9 @@ function MisViajesApp({ onSalir }) {
         <button onClick={() => setVivido(true)} style={{ flex: 1, background: T.card, border: `1px solid ${T.accent}`, color: T.accent, borderRadius: T.r, padding: "16px 10px", fontSize: 14, fontWeight: 800, cursor: "pointer" }}><Ico n="reloj" s={16} /> Ya vivido</button>
       </div>
       {(data.viajes || []).length === 0 && <div style={{ textAlign: "center", color: T.muted, fontSize: 13, padding: "30px 20px", lineHeight: 1.6 }}>Todavía no hay viajes.<br />Buenos Aires → Salta te está esperando.</div>}
-      {(data.viajes || []).map(v => <CardViaje key={v.id} v={v} onAbrir={() => setViajeId(v.id)} onBorrar={() => borrarViaje(v)} />)}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        {(data.viajes || []).map(v => <CardViaje key={v.id} v={v} onAbrir={() => setViajeId(v.id)} onBorrar={() => borrarViaje(v)} />)}
+      </div>
     </div>
   </div></Fondo>);
 }
