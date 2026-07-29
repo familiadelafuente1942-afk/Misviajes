@@ -474,7 +474,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.115 · 26 jul 2026";
+const APP_VER = "v10.116 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -891,8 +891,8 @@ function Bitacora({ viaje, actualizar, media, recargarMedia, hotel, setHotel, po
         <button onClick={() => borrarEntrada(en)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer", padding: 2 }}><Ico n="tacho" s={14} /></button>
       </div>
       {en.texto && <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: deEntrada(en).length ? 9 : 0 }}>{en.texto}</div>}
-      {deEntrada(en).length > 0 && <div style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 3 }}>
-        {deEntrada(en).map((m, i) => <MediaGrande key={m.id} m={m} items={deEntrada(en)} index={i} />)}
+      {deEntrada(en).length > 0 && <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+        {deEntrada(en).map((m, i) => <MediaGrande key={m.id} m={m} tam="100%" items={deEntrada(en)} index={i} />)}
       </div>}
     </div>))}
   </div>);
@@ -978,7 +978,7 @@ function MapaRecuerdos({ viaje, entradas, media, lugarSel, setLugarSel, onBorrar
           <button onClick={() => { onBorrarEntrada(en); setLugarSel(null); }} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer", padding: 2 }}><Ico n="tacho" s={13} /></button>
         </div>
         {en.texto && <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: deEntrada(en).length ? 8 : 0 }}>{en.texto}</div>}
-        {deEntrada(en).length > 0 && <div style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 3 }}>{deEntrada(en).map((m, i) => <MediaGrande key={m.id} m={m} items={deEntrada(en)} index={i} />)}</div>}
+        {deEntrada(en).length > 0 && <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>{deEntrada(en).map((m, i) => <MediaGrande key={m.id} m={m} tam="100%" items={deEntrada(en)} index={i} />)}</div>}
       </div>))}
     </div>}
   </div>);
@@ -1057,7 +1057,7 @@ function MediaGrande({ m, tam = 160, items, index = 0 }) {
   // reproduce adentro del cuadradito, solo muestra el primer cuadro
   // con un ícono de play — el video de verdad se ve grande.
   return (<>
-    <div onClick={abrir} style={{ position: "relative", width: tam, height: tam, borderRadius: 10, flexShrink: 0, cursor: "pointer", background: "#000", overflow: "hidden" }}>
+    <div onClick={abrir} style={{ position: "relative", width: tam, height: tam === "100%" ? "auto" : tam, aspectRatio: tam === "100%" ? "1" : undefined, borderRadius: 10, flexShrink: 0, cursor: "pointer", background: "#000", overflow: "hidden" }}>
       {m.tipo === "video"
         ? <video src={url} muted playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         : <img src={url} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
