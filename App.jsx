@@ -414,7 +414,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.98 · 26 jul 2026";
+const APP_VER = "v10.99 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -801,6 +801,7 @@ function Bitacora({ viaje, actualizar, media, recargarMedia, hotel, setHotel, po
           </div>
           : <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
             {!viaje.vivido && <button onClick={marcarAca} disabled={buscandoGPS} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}><Ico n="pin" s={13} /> {buscandoGPS ? "Buscando…" : "Estoy acá (GPS)"}</button>}
+            {hotel && <button onClick={() => setLugar({ nombre: hotel.nombre.split(",")[0], lat: hotel.lat, lon: hotel.lon })} style={{ background: "rgba(232,163,61,.12)", border: `1px solid ${T.accent}`, color: T.accent, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}><Ico n="cama" s={13} /> {hotel.nombre.split(",")[0]}</button>}
             {(viaje.puntos || []).map((p, i) => <button key={i} onClick={() => setLugar({ nombre: p.nombre.split(",")[0], lat: p.lat, lon: p.lon })} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, cursor: "pointer" }}>{p.nombre.split(",")[0]}</button>)}
             <button onClick={() => setBuscarLugar(v2 => !v2)} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.sub, borderRadius: 9, padding: "8px 11px", fontSize: 11.5, cursor: "pointer" }}><Ico n="lupa" s={12} /> Otro lugar</button>
           </div>}
