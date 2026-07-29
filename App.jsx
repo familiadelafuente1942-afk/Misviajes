@@ -405,7 +405,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.90 · 26 jul 2026";
+const APP_VER = "v10.92 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -831,7 +831,7 @@ function MapaRecuerdos({ viaje, entradas, media, lugarSel, setLugarSel, onBorrar
 
   useEffect(() => {
     let vivo = true;
-    cargarLeaflet().then(L => {
+    cargarLeaflet().then(async L => {
       if (!vivo || !ref.current) return;
       if (!mapRef.current) {
         mapRef.current = L.map(ref.current, { zoomControl: true, attributionControl: false }).setView([-34.6, -58.4], 4);
@@ -847,6 +847,20 @@ function MapaRecuerdos({ viaje, entradas, media, lugarSel, setLugarSel, onBorrar
         }).addTo(capa);
         m.on("click", () => setLugarSel(g));
       });
+
+      // El recorrido real: conecta los lugares EN ORDEN CRONOLÓGICO (por
+      // cuándo pasó cada cosa, no por dónde quedan) — mismo motor de
+      // ruteo real que ya usamos para la ruta aeropuerto → hotel.
+      const ordenCronologico = [...lista].sort((a, b) => Math.min(...a.entradas.map(e => e.ts || 0)) - Math.min(...b.entradas.map(e => e.ts || 0)));
+      if (ordenCronologico.length >= 2) {
+        try {
+          const ruta = await calcularRuta(ordenCronologico.map(g => g.lugar));
+          if (vivo && ruta && capaRef.current === capa) {
+            L.polyline(ruta.linea, { color: "#E8A33D", weight: 3, opacity: 0.75, dashArray: "6,7" }).addTo(capa);
+          }
+        } catch { }
+      }
+
       if (lista.length) map.fitBounds(L.latLngBounds(lista.map(g => [g.lugar.lat, g.lugar.lon])), { padding: [45, 45], maxZoom: 9 });
       else if ((viaje.puntos || []).length) map.fitBounds(L.latLngBounds(viaje.puntos.map(p => [p.lat, p.lon])), { padding: [40, 40], maxZoom: 6 });
     }).catch(() => { });
@@ -1535,7 +1549,28 @@ function ReservasGuardadas({ viaje, actualizar, media }) {
       catch { docId = null; alert("No pude guardar el archivo adjunto (¿sin espacio en el teléfono?)."); }
     }
     const reserva = { id: uid(), tipo: form.tipo, nombre: form.nombre.trim(), lugar: form.lugar.trim(), fechaDesde: form.fechaDesde, fechaHasta: form.fechaHasta, numeroReserva: form.numeroReserva.trim(), descripcion: form.descripcion.trim(), docId };
-    actualizar({ ...viaje, reservas: [...reservas, reserva] });
+
+    // El comprobante se queda acá, en Reservas — pero si tiene fecha y
+    // lugar, TAMBIÉN queda marcado en el Itinerario, en el día que
+    // corresponde: hospedaje, auto, actividad, lo que sea.
+    let bitacoraNueva = viaje.bitacora || [];
+    if (reserva.fechaDesde && reserva.lugar) {
+      try {
+        const geo = await geocodificar(reserva.lugar);
+        if (geo?.[0]) {
+          const yaExiste = bitacoraNueva.some(e => e.fecha === reserva.fechaDesde && e.lugar?.nombre?.split(",")[0]?.toLowerCase() === geo[0].nombre.split(",")[0].toLowerCase());
+          if (!yaExiste) {
+            const ETIQUETA_TIPO = { hospedaje: "Llegada al hospedaje", auto: "Retiro del auto", actividad: "Actividad", otro: "Reserva" };
+            bitacoraNueva = [...bitacoraNueva, {
+              id: uid(), fecha: reserva.fechaDesde, ts: new Date(`${reserva.fechaDesde}T12:00:00`).getTime(),
+              texto: `${ETIQUETA_TIPO[reserva.tipo] || "Reserva"} — ${reserva.nombre || reserva.lugar}.`,
+              lugar: { nombre: geo[0].nombre, lat: geo[0].lat, lon: geo[0].lon },
+            }];
+          }
+        }
+      } catch { }
+    }
+    actualizar({ ...viaje, reservas: [...reservas, reserva], bitacora: bitacoraNueva });
     setForm(null);
   }
   function borrar(id) {
