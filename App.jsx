@@ -414,7 +414,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.100 · 26 jul 2026";
+const APP_VER = "v10.101 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1941,6 +1941,13 @@ function EnDestino({ lugar, viaje, perfil, hotel, setHotel, poi, setPoi, rutaHot
     <div style={{ fontSize: 13, fontWeight: 800, color: T.text, marginBottom: 4, display: "flex", alignItems: "center", gap: 7 }}><Ico n="pin" s={15} c={T.accent} /> Ya en {lugar}</div>
     <div style={{ fontSize: 11, color: T.sub, lineHeight: 1.5, marginBottom: 11 }}>Llegaron en avión — acá no tienen auto propio. Esto es lo mismo que tendrían armando el viaje en auto, pero para resolver desde acá.</div>
 
+    <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>🚕 Cómo moverte (del aeropuerto, al hotel, a cualquier lado)</div>
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
+      <button onClick={abrirUber} style={{ background: "#000", border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>Uber</button>
+      <button onClick={() => abrir(`https://www.google.com/search?q=${encodeURIComponent("Didi en " + lugar)}`)} style={{ background: "#FF6E00", border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>Didi</button>
+      <button onClick={() => abrirCerca("remis o taxi")} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>Remis / Taxi cerca</button>
+    </div>
+
     <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>🏨 ¿Dónde te hospedás?</div>
     {hotel ? <div style={{ display: "flex", alignItems: "center", gap: 8, background: T.card2, border: `1px solid ${T.accent}`, borderRadius: 10, padding: "10px 12px", marginBottom: 13 }}>
       <Ico n="cama" s={14} c={T.accent} />
@@ -1956,13 +1963,6 @@ function EnDestino({ lugar, viaje, perfil, hotel, setHotel, poi, setPoi, rutaHot
       {[["Kayak Autos", "#FF690F", `https://www.kayak.com.ar/cars/${encodeURIComponent(lugar)}${viaje.fechaInicio ? `/${viaje.fechaInicio}/${viaje.fechaVuelta || viaje.fechaInicio}` : ""}`],
         ["Despegar Autos", "#4A148C", "https://www.despegar.com.ar/autos/"]]
         .map(([nom, color, url]) => <button key={nom} onClick={() => abrir(url)} style={{ background: color, border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{nom}</button>)}
-    </div>
-
-    <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>🚕 Cómo moverte (del aeropuerto, al hotel, a cualquier lado)</div>
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
-      <button onClick={abrirUber} style={{ background: "#000", border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>Uber</button>
-      <button onClick={() => abrir(`https://www.google.com/search?q=${encodeURIComponent("Didi en " + lugar)}`)} style={{ background: "#FF6E00", border: "none", color: "#fff", borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>Didi</button>
-      <button onClick={() => abrirCerca("remis o taxi")} style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 9, padding: "10px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>Remis / Taxi cerca</button>
     </div>
 
     <div style={{ fontSize: 10.5, fontWeight: 800, color: T.sub, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 7 }}>🗺 Explorar cerca de acá{buscandoCoords ? " (ubicando…)" : ""}</div>
