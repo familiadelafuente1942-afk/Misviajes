@@ -405,7 +405,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.86 · 26 jul 2026";
+const APP_VER = "v10.87 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1545,8 +1545,20 @@ function ReservasGuardadas({ viaje, actualizar, media }) {
   }
   function verDoc(docId) {
     const m = (media || []).find(x => x.id === docId);
-    if (!m) { alert("No encuentro el archivo adjunto."); return; }
+    if (!m) { alert("No encuentro el archivo adjunto — puede que el teléfono haya borrado el almacenamiento local. Volvé a sacarle una foto o pedile el voucher de nuevo a la aerolínea/al hotel, y esta vez guardá también una copia con el botón de al lado."); return; }
     window.open(URL.createObjectURL(m.blob), "_blank");
+  }
+  async function guardarCopia(docId, nombreArchivo) {
+    const m = (media || []).find(x => x.id === docId);
+    if (!m) { alert("No encuentro el archivo adjunto para guardar la copia."); return; }
+    const archivo = new File([m.blob], nombreArchivo || m.nombre || "voucher", { type: m.blob.type || "application/octet-stream" });
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
+        await navigator.share({ files: [archivo] });
+      } else {
+        window.open(URL.createObjectURL(m.blob), "_blank");   // respaldo: al menos abrirlo, para guardarlo a mano desde ahí
+      }
+    } catch { }   // si cancela el share, no es un error
   }
 
   return (<div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 14 }}>
@@ -1574,6 +1586,7 @@ function ReservasGuardadas({ viaje, actualizar, media }) {
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
           {r.docId && <button onClick={() => verDoc(r.docId)} style={{ background: T.accent, border: "none", color: "#1a1205", borderRadius: 8, padding: "7px 10px", fontSize: 10.5, fontWeight: 800, cursor: "pointer" }}>Ver voucher</button>}
+          {r.docId && <button onClick={() => guardarCopia(r.docId, `${r.nombre || "reserva"}.jpg`)} title="Guardar una copia en Archivos/Fotos" style={{ background: T.card, border: `1px solid ${T.border}`, color: T.sub, borderRadius: 8, padding: "7px 9px", cursor: "pointer" }}><Ico n="descargar" s={13} /></button>}
           <button onClick={() => borrar(r.id)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="tacho" s={13} /></button>
         </div>
       </div>
@@ -1697,8 +1710,20 @@ function VuelosGuardados({ viaje, actualizar, media, cfg }) {
   }
   function verDoc(docId) {
     const m = (media || []).find(x => x.id === docId);
-    if (!m) { alert("No encuentro el archivo adjunto."); return; }
+    if (!m) { alert("No encuentro el archivo adjunto — puede que el teléfono haya borrado el almacenamiento local. Volvé a sacarle una foto o pedile el voucher de nuevo a la aerolínea/al hotel, y esta vez guardá también una copia con el botón de al lado."); return; }
     window.open(URL.createObjectURL(m.blob), "_blank");
+  }
+  async function guardarCopia(docId, nombreArchivo) {
+    const m = (media || []).find(x => x.id === docId);
+    if (!m) { alert("No encuentro el archivo adjunto para guardar la copia."); return; }
+    const archivo = new File([m.blob], nombreArchivo || m.nombre || "voucher", { type: m.blob.type || "application/octet-stream" });
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
+        await navigator.share({ files: [archivo] });
+      } else {
+        window.open(URL.createObjectURL(m.blob), "_blank");   // respaldo: al menos abrirlo, para guardarlo a mano desde ahí
+      }
+    } catch { }   // si cancela el share, no es un error
   }
 
   return (<div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 14 }}>
@@ -1718,6 +1743,7 @@ function VuelosGuardados({ viaje, actualizar, media, cfg }) {
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
           {v2.docId && <button onClick={() => verDoc(v2.docId)} style={{ background: T.accent, border: "none", color: "#1a1205", borderRadius: 8, padding: "7px 10px", fontSize: 10.5, fontWeight: 800, cursor: "pointer" }}>Ver pasaje</button>}
+          {v2.docId && <button onClick={() => guardarCopia(v2.docId, `${v2.aerolinea || "vuelo"}-${v2.numero || ""}.jpg`)} title="Guardar una copia en Archivos/Fotos" style={{ background: T.card2, border: `1px solid ${T.border}`, color: T.sub, borderRadius: 8, padding: "7px 9px", cursor: "pointer" }}><Ico n="descargar" s={13} /></button>}
           <button onClick={() => borrar(v2.id)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="tacho" s={13} /></button>
         </div>
       </div>
@@ -3362,6 +3388,9 @@ function MisViajesApp({ onSalir }) {
   const [cfg, setCfg] = useState(cargarCfg);
   aplicarTema(cfg.tema);   // el tema se aplica ANTES de dibujar nada
   useEffect(() => { try { document.title = cfg.titulo || "Mis Viajes"; } catch { } }, [cfg.titulo]);
+  // Le pedimos a iOS que NO borre lo guardado localmente (fotos, vouchers)
+  // por falta de uso o espacio — reduce el riesgo, no lo elimina del todo.
+  useEffect(() => { try { navigator.storage?.persist?.(); } catch { } }, []);
   const [viajeId, setViajeId] = useState(null);
   const [ajustes, setAjustes] = useState(false);
   const [vivido, setVivido] = useState(false);
