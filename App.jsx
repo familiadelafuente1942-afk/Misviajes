@@ -434,7 +434,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.104 · 26 jul 2026";
+const APP_VER = "v10.105 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -806,7 +806,7 @@ function Bitacora({ viaje, actualizar, media, recargarMedia, hotel, setHotel, po
         <div style={{ fontSize: 12.5, fontWeight: 800, color: T.text, flex: 1 }}>{viaje.vivido ? "Sumar otro recuerdo de este viaje" : "¿Qué pasó hoy en el viaje?"}</div>
         <input type="date" value={fecha} max={viaje.vivido ? undefined : hoyISO()} onChange={e => setFecha(e.target.value)} style={{ background: T.card2, border: `1px solid ${T.border}`, borderRadius: 8, padding: "7px 9px", fontSize: 12, color: T.text, colorScheme: "dark" }} />
       </div>
-      <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={3} placeholder="Paramos en Rosario, comimos el mejor carlitos de la costanera…"
+      <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={3} placeholder="¿Qué hicieron?"
         style={{ width: "100%", background: T.card2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 13px", fontSize: 13.5, color: T.text, outline: "none", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
       {pendMedia.length > 0 && <div style={{ display: "flex", gap: 7, marginTop: 9, overflowX: "auto", paddingBottom: 3 }}>
         {pendMedia.map(id => { const m = media.find(x => x.id === id); return m ? <Mini key={id} m={m} tam={72} onBorrar={async () => { await mediaBorrar(id); setPendMedia(p => p.filter(x => x !== id)); recargarMedia(); }} /> : null; })}
