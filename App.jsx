@@ -405,7 +405,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.87 · 26 jul 2026";
+const APP_VER = "v10.88 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -2787,9 +2787,10 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
     window.open(`https://www.google.com/maps/dir/?api=1&origin=${o.lat},${o.lon}&destination=${d.lat},${d.lon}${wp ? `&waypoints=${encodeURIComponent(wp)}` : ""}&travelmode=driving`, "_blank");
   }
 
+  const hayAlgoReservado = (viaje.vuelos || []).length > 0 || (viaje.reservas || []).length > 0;
   const TABS = viaje.vivido
     ? [["bitacora", "Itinerario de viaje", "libro"], ["ruta", "Mapa del viaje", "mapa"], ["lugar", "Del lugar", "nota"], ["clip", "Clip", "peli"]]
-    : [["ruta", "Planeando mi viaje", "mapa"], ["reservas", "Reservas", "ticket"], ["bitacora", "Itinerario de viaje", "libro"], ["clima", "Clima", "sol"], ["lugar", "Del lugar", "nota"], ["gastos", "Gastos", "plata"], ["valija", "Valija", "valija"], ["clip", "Clip", "peli"]];
+    : [["ruta", "Planeando mi viaje", "mapa"], ["reservas", hayAlgoReservado ? "Ya tenés tu reserva" : "Reservas", "ticket"], ["bitacora", "Itinerario de viaje", "libro"], ["clima", "Clima", "sol"], ["lugar", "Del lugar", "nota"], ["gastos", "Gastos", "plata"], ["valija", "Valija", "valija"], ["clip", "Clip", "peli"]];
 
   return (<div style={{ minHeight: "100vh", paddingBottom: 90 }}>
     <div style={{ padding: "14px 16px 0", paddingTop: "max(14px, env(safe-area-inset-top))" }}>
