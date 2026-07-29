@@ -405,7 +405,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.93 · 26 jul 2026";
+const APP_VER = "v10.94 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -842,7 +842,7 @@ function MapaRecuerdos({ viaje, entradas, media, lugarSel, setLugarSel, onBorrar
     if (!grupos[k]) grupos[k] = { lugar: e.lugar, entradas: [] };
     grupos[k].entradas.push(e);
   });
-  const lista = Object.values(grupos);
+  const lista = Object.values(grupos).filter(g => !g.entradas.every(e => e.origenAuto === "vuelo"));
 
   useEffect(() => {
     let vivo = true;
@@ -856,9 +856,11 @@ function MapaRecuerdos({ viaje, entradas, media, lugarSel, setLugarSel, onBorrar
       if (capaRef.current) capaRef.current.remove();
       const capa = L.layerGroup().addTo(map); capaRef.current = capa;
       lista.forEach((g, gi) => {
+        const esHotel = g.entradas.some(e => e.origenAuto === "hotel");
         const nMedia = g.entradas.reduce((s2, e) => s2 + (e.mediaIds || []).length, 0);
+        const contenido = esHotel ? "H" : (nMedia || "✎");
         const m = L.marker([g.lugar.lat, g.lugar.lon], {
-          icon: L.divIcon({ className: "", iconSize: [36, 36], iconAnchor: [18, 18], html: `<div style="width:36px;height:36px;border-radius:50%;background:#E8A33D;border:3px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;color:#1a1205;font-weight:800;font-size:${nMedia > 9 ? 12 : 14}px;font-family:system-ui">${nMedia || "✎"}</div>` })
+          icon: L.divIcon({ className: "", iconSize: [36, 36], iconAnchor: [18, 18], html: `<div style="width:36px;height:36px;border-radius:50%;background:${esHotel ? "#4D9FFF" : "#E8A33D"};border:3px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:${esHotel || nMedia > 9 ? 13 : 14}px;font-family:system-ui">${contenido}</div>` })
         }).addTo(capa);
         m.on("click", () => setLugarSel(g));
       });
@@ -1743,6 +1745,7 @@ function VuelosGuardados({ viaje, actualizar, media, cfg }) {
               ts: new Date(`${fechaLlegada}T${horaTxt.length === 5 ? horaTxt : "12:00"}:00`).getTime(),
               texto: `Llegamos a ${geo[0].nombre.split(",")[0]}${vuelo.aerolinea ? ` — vuelo ${vuelo.aerolinea}${vuelo.numero ? " " + vuelo.numero : ""}` : ""}${vuelo.horaLlegada ? `, ${vuelo.horaLlegada}hs` : ""}. Acá arranca el viaje.`,
               lugar: { nombre: geo[0].nombre, lat: geo[0].lat, lon: geo[0].lon },
+              origenAuto: "vuelo",   // ciudad genérica de llegada — no aporta como círculo propio en el mapa
             }];
           }
         } catch { }
@@ -2757,6 +2760,7 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
           id: uid(), fecha: hoyISO(), ts: Date.now(),
           texto: `Llegamos al hotel — ${h.nombre.split(",")[0]}.`,
           lugar: { nombre: h.nombre, lat: h.lat, lon: h.lon },
+          origenAuto: "hotel",   // así el mapa lo marca con una H, no un número
         }];
       }
     }
