@@ -474,7 +474,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.114 · 26 jul 2026";
+const APP_VER = "v10.115 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -3339,14 +3339,34 @@ function ChatIdeas({ cfg, viajes, onCrearViaje }) {
     setArmando(true);
     try {
       const sysExtraer = "Analizás una charla sobre planificar un viaje. Respondés SOLO JSON, sin texto ni markdown.";
-      const promptExtraer = `Leé esta charla y decime si ya eligieron un destino concreto para viajar (no una lista de opciones — UNO elegido), desde dónde salen, y cuántos días tienen.\n\nCHARLA:\n${msgs.map(m => `${m.role === "user" ? "Usuario" : "Copiloto"}: ${m.content}`).join("\n")}\n\nRespondé SOLO este JSON:\n{"elegido":true,"destino":"lugar concreto","desde":"ciudad de origen si se menciona, si no poné \"\"","dias":0}\nSi todavía no hay UN destino claro (siguen viendo opciones), poné "elegido":false.`;
+      const promptExtraer = `Leé esta charla y sacá a dónde quieren viajar, desde dónde salen y cuántos días tienen.
+
+REGLAS IMPORTANTES:
+- Si el usuario nombró un lugar, una región, una ruta o un tema de viaje, ESO CUENTA como destino. No hace falta que sea una ciudad.
+- Convertí los temas en un destino concreto y real. Ejemplos: "la ruta del vino" → "Mendoza, Argentina"; "el Camino de Santiago" → "Santiago de Compostela, España"; "las pirámides" → "Egipto"; "el Caribe" → el país o isla más probable según el contexto.
+- Si el copiloto ofreció varias opciones y el usuario ya dijo cuál le gustó, esa es la elegida.
+- Sacá los días si se mencionan en cualquier parte (ej: "12 días" → 12).
+- Dejá "destino" vacío SOLO si en toda la charla no se nombró ningún lugar, región ni tema de viaje.
+
+CHARLA:
+${msgs.map(m => `${m.role === "user" ? "Usuario" : "Copiloto"}: ${m.content}`).join("\n")}
+
+Respondé SOLO este JSON:
+{"destino":"lugar concreto y real, o vacío","desde":"ciudad de origen si se menciona, si no vacío","dias":0}`;
       const respExtraer = await llamarIA([{ role: "user", content: promptExtraer }], sysExtraer, 400);
       const mE = respExtraer.match(/\{[\s\S]*\}/);
-      const datos = mE ? JSON.parse(mE[0]) : null;
-      if (!datos || !datos.elegido || !datos.destino) { alert("Todavía no veo un destino elegido en la charla — decime cuál les gustó y lo armo."); setArmando(false); return; }
+      let datos = null; try { datos = mE ? JSON.parse(mE[0]) : null; } catch { }
+      let destinoElegido = (datos?.destino || "").trim();
+      // Si igual no lo pudo deducir, NO dejamos el botón sin salida: se pide
+      // a mano, en vez de tirar un error y que no pase nada.
+      if (!destinoElegido) {
+        const aMano = window.prompt("No pude deducir el destino de la charla. ¿A dónde quieren ir? (ej: Mendoza)");
+        destinoElegido = (aMano || "").trim();
+        if (!destinoElegido) { setArmando(false); return; }
+      }
 
       const perfil = perfilTexto(cfg);
-      const destino = datos.destino, desde = datos.desde || cfg?.casa?.nombre || "Buenos Aires, Argentina", dias = datos.dias || 7;
+      const destino = destinoElegido, desde = (datos?.desde || "").trim() || cfg?.casa?.nombre || "Buenos Aires, Argentina", dias = Number(datos?.dias) > 0 ? Number(datos.dias) : 7;
       const sys = "Sos un planificador de viajes de primer nivel, con conocimiento profundo del mundo. Respondés SOLO con JSON válido, sin texto adicional ni markdown.";
       const prompt = `${perfil ? `ASÍ VIAJA ESTA GENTE (armá el itinerario exactamente para ellos): ${perfil}\n\n` : ""}Quieren viajar a: ${destino}\nSalen desde: ${desde}\nDías disponibles: ${dias}\n\nANTES de armar nada, pensá: ¿qué es lo que hace FAMOSO a este destino — lo principal, lo que nadie que va ahí se puede perder? Ejemplos de cómo pensarlo: Egipto → las pirámides de Giza y el Nilo. Mendoza → la Ruta del Vino y las bodegas. Santiago de Compostela → el Camino de Santiago. Cusco → Machu Picchu y el Camino Inca. Orlando → los parques Disney. Alemania, según la ciudad → historia (Berlín: el Muro; Múnich: la Oktoberfest). Si esa atracción central es EN SÍ un recorrido de varios días (un camino de peregrinación, una ruta del vino, la Ruta 40), las paradas del itinerario tienen que ser LAS ETAPAS de ese recorrido — pueblos y tramos en orden — no una ciudad genérica con noches sueltas. Si es un sitio puntual (pirámides, un parque, una torre), asegurate de que al menos una parada esté dedicada explícitamente a eso, con el "por_que" explicando por qué es lo imperdible. Armá el MEJOR itinerario posible para ellos: el orden de lugares, cuántas noches en cada uno, y por qué cada lugar es para ELLOS. Si aman manejar, roadtrip con rutas lindas; si no, ciudades base y traslados cómodos. Si el destino requiere avión desde el origen, la primera parada es la ciudad de llegada.\n\nRespondé SOLO este JSON:\n{"nombre_viaje":"...","atraccion_principal":"1 frase: lo imperdible de este viaje y por qué armamos el recorrido así","paradas":[{"nombre":"Ciudad o lugar","pais_o_provincia":"...","noches":2,"por_que":"1 frase pensada para ellos, conectada con lo imperdible del lugar","lat":-00.0000,"lon":-00.0000}]}`;
       const resp = await llamarIA([{ role: "user", content: prompt }], sys, 3000);
