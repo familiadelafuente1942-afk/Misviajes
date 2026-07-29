@@ -405,7 +405,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.92 · 26 jul 2026";
+const APP_VER = "v10.93 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -693,7 +693,7 @@ function Mini({ m, onBorrar, sel, onSel, tam = 92 }) {
 }
 
 /* ═══ BITÁCORA: el diario del viaje ══════════════════════════════ */
-function Bitacora({ viaje, actualizar, media, recargarMedia }) {
+function Bitacora({ viaje, actualizar, media, recargarMedia, hotel, setHotel }) {
   const fileRef = useRef(null);
   const [texto, setTexto] = useState("");
   // Un viaje vivido no arranca en "hoy": arranca el día después de la última
@@ -760,6 +760,21 @@ function Bitacora({ viaje, actualizar, media, recargarMedia }) {
   const deEntrada = (en) => (en.mediaIds || []).map(id => media.find(m => m.id === id)).filter(Boolean);
 
   return (<div>
+    {/* Desde dónde arranca el itinerario — el mismo campo que "Ya en
+        destino", pero acá también: sin esto, el itinerario no sabe de
+        dónde partir. Cargarlo acá ya lo deja marcado como primera parada. */}
+    {setHotel && <div style={{ background: hotel ? T.card2 : T.card, border: `1px solid ${hotel ? T.border : T.accent}`, borderRadius: T.r, padding: "12px 13px", marginBottom: 14 }}>
+      {hotel ? <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Ico n="cama" s={14} c={T.accent} />
+        <span style={{ flex: 1, fontSize: 12.5, color: T.text, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hotel.nombre}</span>
+        <button onClick={() => setHotel(null)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Ico n="cerrar" s={12} /></button>
+      </div> : <>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: T.text, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}><Ico n="cama" s={14} c={T.accent} /> ¿Dónde te hospedás?</div>
+        <BuscarLugar placeholder="Nombre o dirección del hotel…" onElegir={(r) => setHotel(r)} />
+        <div style={{ fontSize: 10.5, color: T.muted, marginTop: 5 }}>Así el itinerario arranca desde ahí — queda marcado como el primer punto.</div>
+      </>}
+    </div>}
+
     {/* nueva entrada */}
     <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: 14, marginBottom: 16 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 9 }}>
@@ -2956,7 +2971,7 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
       {tab === "lugar" && <DelLugarTab viaje={viaje} perfil={perfil} actualizar={actualizar} />}
       {tab === "gastos" && <GastosTab viaje={viaje} actualizar={actualizar} />}
       {tab === "valija" && <ValijaTab viaje={viaje} perfil={perfil} climaResumen={climaResumen} actualizar={actualizar} />}
-      {tab === "bitacora" && <Bitacora viaje={viaje} actualizar={actualizar} media={media} recargarMedia={recargarMedia} />}
+      {tab === "bitacora" && <Bitacora viaje={viaje} actualizar={actualizar} media={media} recargarMedia={recargarMedia} hotel={hotelDestino} setHotel={setHotelDestino} />}
       {tab === "clip" && <ClipMaker viaje={viaje} media={media} />}
     </div>
 
