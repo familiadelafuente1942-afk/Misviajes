@@ -434,7 +434,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.103 · 26 jul 2026";
+const APP_VER = "v10.104 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -2921,8 +2921,8 @@ function PantallaViaje({ viaje, actualizar, volver, cfg = {} }) {
           <div style={{ fontSize: 10.5, color: T.sub }}>{hFmt(ruta.dur)}</div>
         </div>}
       </div>
-      <div style={{ display: "flex", gap: 5, margin: "12px 0 0", overflowX: "auto", paddingBottom: 2 }}>
-        {TABS.map(([k, l, ic]) => <button key={k} onClick={() => setTab(k)} style={{ flexShrink: 0, padding: "10px 13px", borderRadius: 10, border: `1px solid ${tab === k ? T.accent : T.border}`, background: tab === k ? "rgba(232,163,61,.12)" : T.card, color: tab === k ? T.accent : T.sub, fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}><Ico n={ic} s={14} /> {l}</button>)}
+      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", margin: "12px 0 0" }}>
+        {TABS.map(([k, l, ic]) => <button key={k} onClick={() => setTab(k)} style={{ padding: "10px 13px", borderRadius: 10, border: `1px solid ${tab === k ? T.accent : T.border}`, background: tab === k ? "rgba(232,163,61,.12)" : T.card, color: tab === k ? T.accent : T.sub, fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}><Ico n={ic} s={14} /> {l}</button>)}
       </div>
     </div>
 
