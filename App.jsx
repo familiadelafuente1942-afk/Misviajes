@@ -405,7 +405,7 @@ async function leerReservaIA(file) {
 }
 
 /* ── Versión y actualización automática ─────────────────────────── */
-const APP_VER = "v10.85 · 26 jul 2026";
+const APP_VER = "v10.86 · 26 jul 2026";
 const _abiertaEn = Date.now();
 function bundleActual() {
   try { for (const sc of document.scripts) { const m = (sc.src || "").match(/assets\/[^"']*\.js/); if (m) return m[0]; } } catch { }
@@ -1551,7 +1551,10 @@ function ReservasGuardadas({ viaje, actualizar, media }) {
 
   return (<div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: T.r, padding: "13px 14px", marginBottom: 14 }}>
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
-      <div style={{ flex: 1, fontSize: 13, fontWeight: 800, color: T.text, display: "flex", alignItems: "center", gap: 7 }}><Ico n="cama" s={15} c={T.accent} /> Reservas del viaje</div>
+      <div style={{ flex: 1, fontSize: 13, fontWeight: 800, color: reservas.length > 0 ? T.ok : T.text, display: "flex", alignItems: "center", gap: 7 }}>
+        <Ico n={reservas.length > 0 ? "check" : "cama"} s={15} c={reservas.length > 0 ? T.ok : T.accent} />
+        {reservas.length > 0 ? `Ya tenés ${reservas.length > 1 ? "tus reservas" : "tu reserva"} (${reservas.length})` : "Reservas del viaje"}
+      </div>
       {!form && <button onClick={() => fileRef.current?.click()} style={{ background: "rgba(232,163,61,.12)", border: `1px solid ${T.accent}`, color: T.accent, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>＋ Agregar</button>}
     </div>
     <input ref={fileRef} type="file" accept="image/*,application/pdf" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) procesarArchivo(f); }} style={{ display: "none" }} />
